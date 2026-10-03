@@ -17,10 +17,6 @@ const AppConfig = Config.all({
   authSecret: Config.Redacted("BETTER_AUTH_SECRET"),
   authUrl: Config.URL("BETTER_AUTH_URL"),
   webUrl: Config.URL("WEB_URL"),
-  resendApiKey: Config.option(Config.Redacted("RESEND_API_KEY")),
-  emailFrom: Config.NonEmptyString("EMAIL_FROM").pipe(
-    Config.withDefault("Cockpit <onboarding@resend.dev>"),
-  ),
 })
 
 /** Validated environment. Throws at startup with every missing/invalid key listed. */

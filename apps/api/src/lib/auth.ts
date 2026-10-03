@@ -1,25 +1,11 @@
 import { schema } from "@cockpit/db"
-import { resetPasswordMessage, verifyEmailMessage, type EmailMessage } from "@cockpit/email"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { openAPI } from "better-auth/plugins"
-import { Effect, Redacted } from "effect"
+import { Redacted } from "effect"
 
 import { config } from "./config"
-import { db, EmailError, Mailer, runtime } from "./services"
-
-/**
- * Fire-and-forget so response timing never reveals whether an account exists.
- * Every failure (including defects) is logged — an email problem must never crash the API.
- */
-function sendInBackground(render: () => Promise<EmailMessage>) {
-  void runtime.runPromise(
-    Effect.tryPromise({ try: render, catch: (cause) => new EmailError({ cause }) }).pipe(
-      Effect.flatMap((message) => Mailer.use((mailer) => mailer.send(message))),
-      Effect.catchCause((cause) => Effect.logError("Failed to send auth email", cause)),
-    ),
-  )
-}
+import { db } from "./services"
 
 export const auth = betterAuth({
   appName: "Cockpit",
@@ -28,25 +14,13 @@ export const auth = betterAuth({
   trustedOrigins: [config.webUrl.origin],
   database: drizzleAdapter(db, { provider: "pg", schema }),
 
+  // Single-user app: the owner account is created by the release step (`@cockpit/db/owner`)
+  // from OWNER_EMAIL / OWNER_PASSWORD, which is also how the password is changed.
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    disableSignUp: true,
     minPasswordLength: 12,
     maxPasswordLength: 256,
-    revokeSessionsOnPasswordReset: true,
-    resetPasswordTokenExpiresIn: 60 * 30,
-    sendResetPassword: async ({ user, url }) => {
-      sendInBackground(() => resetPasswordMessage(user.email, url))
-    },
-  },
-
-  emailVerification: {
-    sendOnSignUp: true,
-    sendOnSignIn: true,
-    autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url }) => {
-      sendInBackground(() => verifyEmailMessage(user.email, url))
-    },
   },
 
   session: {
@@ -60,14 +34,13 @@ export const auth = betterAuth({
     storage: "database",
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
-      "/sign-up/email": { window: 60, max: 3 },
-      "/request-password-reset": { window: 60, max: 3 },
     },
   },
 
   advanced: {
     cookiePrefix: "cockpit",
-    // Set by the Vite dev proxy / nginx from the socket address — clients cannot spoof it.
+    // Set from the socket address by the Vite dev proxy, nginx or Coolify's Traefik, so clients
+    // cannot spoof it. Behind the Vercel rewrite, that address is Vercel's edge, not the browser.
     ipAddress: { ipAddressHeaders: ["x-real-ip"] },
   },
 

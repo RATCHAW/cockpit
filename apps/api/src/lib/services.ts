@@ -1,14 +1,12 @@
 import { createDb, schema, type Database } from "@cockpit/db"
-import { createMailer, type EmailMessage } from "@cockpit/email"
 import { inArray, sql } from "drizzle-orm"
-import { Context, Data, Effect, Layer, ManagedRuntime, Option, Redacted } from "effect"
+import { Context, Data, Effect, Layer, ManagedRuntime, Redacted } from "effect"
 
 import { CURRENCIES } from "../shared/finance"
 import { config } from "./config"
 import { today, type IsoDate } from "./dates"
 
 export class DatabaseError extends Data.TaggedError("DatabaseError")<{ cause: unknown }> {}
-export class EmailError extends Data.TaggedError("EmailError")<{ cause: unknown }> {}
 
 export const db = createDb(Redacted.value(config.databaseUrl))
 
@@ -26,22 +24,6 @@ const query = <A>(run: (db: Database) => Promise<A>) =>
 export const DbLive = Layer.succeed(Db, {
   query,
   ping: query((db) => db.execute(sql`select 1`)).pipe(Effect.asVoid),
-})
-
-export class Mailer extends Context.Service<
-  Mailer,
-  { readonly send: (message: EmailMessage) => Effect.Effect<void, EmailError> }
->()("cockpit/Mailer") {}
-
-export const MailerLive = Layer.sync(Mailer, () => {
-  const send = createMailer({
-    resendApiKey: Option.getOrUndefined(Option.map(config.resendApiKey, Redacted.value)),
-    from: config.emailFrom,
-  })
-  return {
-    send: (message) =>
-      Effect.tryPromise({ try: () => send(message), catch: (cause) => new EmailError({ cause }) }),
-  }
 })
 
 export class RatesError extends Data.TaggedError("RatesError")<{ cause: unknown }> {}
@@ -185,5 +167,5 @@ export const ExchangeRatesLive = Layer.effect(
 
 /** Runs Effects from Promise-land (Hono handlers, Better Auth callbacks). */
 export const runtime = ManagedRuntime.make(
-  Layer.mergeAll(DbLive, MailerLive, ExchangeRatesLive.pipe(Layer.provide(DbLive))),
+  Layer.mergeAll(DbLive, ExchangeRatesLive.pipe(Layer.provide(DbLive))),
 )

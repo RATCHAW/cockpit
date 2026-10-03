@@ -2,11 +2,6 @@ type AuthError = { code?: string; status?: number; message?: string }
 
 const messages: Record<string, string> = {
   INVALID_EMAIL_OR_PASSWORD: "That email and password don't match.",
-  EMAIL_NOT_VERIFIED: "Verify your email first. We just sent you a fresh link.",
-  USER_ALREADY_EXISTS: "An account with this email already exists.",
-  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "An account with this email already exists.",
-  PASSWORD_TOO_SHORT: "Use at least 12 characters.",
-  INVALID_TOKEN: "This link is invalid or has expired. Request a new one.",
 }
 
 export function authErrorMessage(error: unknown): string {

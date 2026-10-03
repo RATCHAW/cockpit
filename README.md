@@ -18,18 +18,22 @@ pnpm dev
 - API docs: http://localhost:5173/api/docs
 - Email previews: http://localhost:3001
 
-If `RESEND_API_KEY` is empty, verification and reset emails, including their links, are printed in
-the API logs.
+Cockpit is single-user: there is no sign-up or password reset, only email and password login.
 
 ## Production
+
+The web app is on Vercel and the API and Postgres are on Coolify. See
+[docs/deployment.md](./docs/deployment.md).
+
+Every time the API container starts, it applies migrations and makes sure the owner account
+(`OWNER_EMAIL` / `OWNER_PASSWORD`) exists. To change the password, change `OWNER_PASSWORD` and
+redeploy. That also signs out every session.
+
+To run the whole stack locally in Docker:
 
 ```sh
 docker compose --profile app up --build -d   # http://localhost:8080
 ```
-
-Set `APP_URL` to the public origin (for example `https://cockpit.example.com`). Also set
-`BETTER_AUTH_SECRET`, `RESEND_API_KEY` and `EMAIL_FROM` in `.env`. Migrations run automatically
-before the API starts.
 
 See [CLAUDE.md](./CLAUDE.md) for architecture and conventions, and
 [docs/design-system.md](./docs/design-system.md) for the design system.

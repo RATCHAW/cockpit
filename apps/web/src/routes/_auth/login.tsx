@@ -1,6 +1,6 @@
 import { revalidateLogic } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { z } from "zod"
 
 import { AuthCard } from "~/components/auth-card"
@@ -43,18 +43,7 @@ function LoginPage() {
   })
 
   return (
-    <AuthCard
-      title="Welcome back"
-      description="Log in to pick up where you left off."
-      footer={
-        <>
-          New here?{" "}
-          <Link to="/sign-up" className="font-semibold text-ink underline underline-offset-4">
-            Create an account
-          </Link>
-        </>
-      }
-    >
+    <AuthCard title="Welcome back" description="Log in to pick up where you left off.">
       <form
         noValidate
         className="grid gap-5"
@@ -78,20 +67,7 @@ function LoginPage() {
         </form.AppField>
 
         <form.AppField name="password">
-          {(field) => (
-            <field.PasswordField
-              label="Password"
-              autoComplete="current-password"
-              hint={
-                <Link
-                  to="/forgot-password"
-                  className="text-body-sm font-semibold text-body underline-offset-4 hover:text-ink hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              }
-            />
-          )}
+          {(field) => <field.PasswordField label="Password" autoComplete="current-password" />}
         </form.AppField>
 
         <form.AppForm>
