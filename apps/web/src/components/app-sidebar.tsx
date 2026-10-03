@@ -21,17 +21,29 @@ import {
 } from "@cockpit/ui/components/sidebar"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
-import { ChevronsUpDownIcon, LayoutGridIcon, LogOutIcon, type LucideIcon } from "lucide-react"
+import {
+  ChevronsUpDownIcon,
+  LayoutGridIcon,
+  LogOutIcon,
+  SettingsIcon,
+  WalletIcon,
+  type LucideIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Logo } from "~/components/logo"
 import { authClient, type Session } from "~/lib/auth-client"
 import { unwrap } from "~/lib/auth-errors"
 
-type NavItem = { title: string; to: "/"; icon: LucideIcon }
+type NavItem = { title: string; to: "/" | "/finances" | "/settings"; icon: LucideIcon }
 
 /** Sections get added here as they're built. */
-const nav: NavItem[] = [{ title: "Overview", to: "/", icon: LayoutGridIcon }]
+const nav: NavItem[] = [
+  { title: "Overview", to: "/", icon: LayoutGridIcon },
+  { title: "Finances", to: "/finances", icon: WalletIcon },
+]
+
+const accountNav: NavItem[] = [{ title: "Settings", to: "/settings", icon: SettingsIcon }]
 
 export function AppSidebar({ user }: { user: Session["user"] }) {
   return (
@@ -45,22 +57,12 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {nav.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <Link to={item.to} activeOptions={{ exact: true }}>
-                    {({ isActive }) => (
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <span>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </span>
-                      </SidebarMenuButton>
-                    )}
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            <NavMenu items={nav} />
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <NavMenu items={accountNav} />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
@@ -68,6 +70,27 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
         <UserMenu user={user} />
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+function NavMenu({ items }: { items: NavItem[] }) {
+  return (
+    <SidebarMenu>
+      {items.map((item) => (
+        <SidebarMenuItem key={item.title}>
+          <Link to={item.to} activeOptions={{ exact: true }}>
+            {({ isActive }) => (
+              <SidebarMenuButton asChild isActive={isActive}>
+                <span>
+                  <item.icon />
+                  <span>{item.title}</span>
+                </span>
+              </SidebarMenuButton>
+            )}
+          </Link>
+        </SidebarMenuItem>
+      ))}
+    </SidebarMenu>
   )
 }
 
@@ -121,6 +144,12 @@ function UserMenu({ user }: { user: Session["user"] }) {
               Signed in as {user.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/settings">
+                <SettingsIcon />
+                Settings
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem
               disabled={signOut.isPending}
               onSelect={(e) => {

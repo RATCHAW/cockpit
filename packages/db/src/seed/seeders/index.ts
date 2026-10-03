@@ -1,4 +1,5 @@
 import type { Seeder } from "../types"
+import { financesSeeder } from "./finances"
 
 /**
  * Feature seeders, run in order after the admin user is created.
@@ -23,4 +24,4 @@ import type { Seeder } from "../types"
  * }
  * ```
  */
-export const seeders: Seeder[] = []
+export const seeders: Seeder[] = [financesSeeder]

@@ -1,6 +1,13 @@
 import { Button } from "@cockpit/ui/components/button"
 import { Input } from "@cockpit/ui/components/input"
 import { Label } from "@cockpit/ui/components/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@cockpit/ui/components/select"
 import { cn } from "@cockpit/ui/lib/utils"
 import { createFormHook, createFormHookContexts } from "@tanstack/react-form"
 import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from "lucide-react"
@@ -100,6 +107,49 @@ function PasswordField({ label, hint, ...props }: TextFieldProps) {
   )
 }
 
+type SelectFieldProps = {
+  label: string
+  hint?: ReactNode
+  placeholder?: string
+  options: ReadonlyArray<{ value: string; label: ReactNode }>
+  disabled?: boolean
+}
+
+function SelectField({ label, hint, placeholder, options, disabled }: SelectFieldProps) {
+  const id = useId()
+  const field = useFieldContext<string>()
+  const error = useFieldError()
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error}>
+      <Select
+        name={field.name}
+        value={field.state.value}
+        onValueChange={(value) => {
+          field.handleChange(value)
+          field.handleBlur()
+        }}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          id={id}
+          className="w-full"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+        >
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent position="popper" className="max-h-72">
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </FieldShell>
+  )
+}
+
 function SubmitButton({
   children,
   pendingLabel,
@@ -137,6 +187,6 @@ function SubmitButton({
 export const { useAppForm } = createFormHook({
   fieldContext,
   formContext,
-  fieldComponents: { TextField, PasswordField },
+  fieldComponents: { TextField, PasswordField, SelectField },
   formComponents: { SubmitButton },
 })

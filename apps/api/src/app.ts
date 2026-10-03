@@ -7,8 +7,12 @@ import { auth } from "./lib/auth"
 import { config } from "./lib/config"
 import { createRouter } from "./lib/hono"
 import { sessionMiddleware } from "./lib/middleware"
+import { financeRoutes } from "./routes/finance"
 import { healthRoutes } from "./routes/health"
 import { meRoutes } from "./routes/me"
+import { recurringRoutes } from "./routes/recurring"
+import { settingsRoutes } from "./routes/settings"
+import { transactionRoutes } from "./routes/transactions"
 
 const api = createRouter().basePath("/api")
 
@@ -28,7 +32,13 @@ api.on(["GET", "POST"], "/auth/*", (c) => auth.handler(c.req.raw))
 
 api.use("*", sessionMiddleware)
 
-export const app = api.route("/", healthRoutes).route("/", meRoutes)
+export const app = api
+  .route("/", healthRoutes)
+  .route("/", meRoutes)
+  .route("/", settingsRoutes)
+  .route("/", financeRoutes)
+  .route("/", transactionRoutes)
+  .route("/", recurringRoutes)
 
 app.doc31("/openapi.json", {
   openapi: "3.1.0",

@@ -40,6 +40,10 @@
   --negative-darkest: #a7000d;
   --negative-bg: #320707;
 
+  /* Charts — income/spending pair, validated for colour-vision deficiency on white */
+  --chart-income: var(--positive);
+  --chart-expense: var(--negative-deep);
+
   /* Tertiary accents — illustration only */
   --accent-orange: #ffc091;
   --accent-cyan: #38c8ff;
@@ -124,6 +128,8 @@
   --color-negative-deep: var(--negative-deep);
   --color-negative-darkest: var(--negative-darkest);
   --color-negative-bg: var(--negative-bg);
+  --color-chart-income: var(--chart-income);
+  --color-chart-expense: var(--chart-expense);
   --color-accent-orange: var(--accent-orange);
   --color-accent-cyan: var(--accent-cyan);
 
