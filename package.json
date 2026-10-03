@@ -16,6 +16,8 @@
     "db:up": "docker compose up -d postgres",
     "db:generate": "pnpm --filter @cockpit/db db:generate",
     "db:migrate": "pnpm --filter @cockpit/db db:migrate",
+    "db:seed": "pnpm --filter @cockpit/db db:seed",
+    "db:reset": "pnpm --filter @cockpit/db db:reset",
     "db:studio": "pnpm --filter @cockpit/db db:studio",
     "auth:generate": "pnpm --filter @cockpit/api auth:generate"
   },

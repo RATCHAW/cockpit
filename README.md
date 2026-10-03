@@ -10,6 +10,7 @@ Requires Node 22+, pnpm 10 and Docker.
 pnpm install
 cp .env.example .env    # set BETTER_AUTH_SECRET to the output of: openssl rand -base64 32
 pnpm db:up && pnpm db:migrate
+pnpm db:seed            # sign in as admin@example.com / admin@example.com
 pnpm dev
 ```
 

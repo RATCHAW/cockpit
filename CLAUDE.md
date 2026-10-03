@@ -39,6 +39,8 @@ production it goes through nginx. Auth cookies are first-party and CORS isn't in
   `revalidateLogic()`).
 - **Protected pages** go under `apps/web/src/routes/_app/`. Add their sidebar entry in
   `src/components/app-sidebar.tsx`.
+- **Seeding:** when a feature adds tables, add a seeder in `packages/db/src/seed/seeders/` (use
+  `drizzle-seed`, owned by `ctx.admin.id`) and register it in `seeders/index.ts`.
 - **Shared UI:** add shadcn components with `pnpm dlx shadcn@latest add <name>` run from
   `packages/ui`. Afterwards, check that imports use `@cockpit/ui/lib/utils`; the CLI sometimes
   writes `from "cn"`.
@@ -48,6 +50,8 @@ production it goes through nginx. Auth cookies are first-party and CORS isn't in
 ```sh
 pnpm db:up          # start Postgres (docker compose)
 pnpm db:migrate     # apply migrations
+pnpm db:seed        # seed admin@example.com (password: admin@example.com) + feature demo data
+pnpm db:reset       # truncate every table, then seed
 pnpm dev            # api :3000 + web :5173 + email preview :3001
 pnpm lint && pnpm typecheck
 pnpm format

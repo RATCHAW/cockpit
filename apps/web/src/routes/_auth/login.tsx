@@ -26,7 +26,9 @@ function LoginPage() {
     mutationFn: (values: z.infer<typeof loginSchema>) =>
       unwrap(authClient.signIn.email({ ...values, rememberMe: true })),
     onSuccess: async () => {
-      await queryClient.invalidateQueries(sessionQueryOptions)
+      // Not invalidateQueries: nothing observes the session here, so it wouldn't refetch, and
+      // the guard's ensureQueryData would keep returning the cached `null`.
+      await queryClient.fetchQuery({ ...sessionQueryOptions, staleTime: 0 })
       await navigate({ to: safeRedirect(redirect), replace: true })
     },
   })
