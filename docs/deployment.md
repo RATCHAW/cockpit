@@ -14,7 +14,7 @@ API, so auth cookies stay first-party and no CORS is involved.
 Coolify runs at `http://vivace-vps:8000`, in the **cockpit** project.
 
 - **cockpit-db**: a Coolify-managed PostgreSQL. It isn't exposed publicly.
-- **cockpit-api**: built from this repo (public GitHub, branch `feature/projects-board`) with
+- **cockpit-api**: built from this repo (public GitHub, branch `main`) with
   `apps/api/Dockerfile`. It's served at `https://cockpit-api.bendarsiayoub.com` on port 3000, and
   the wildcard `*.bendarsiayoub.com` DNS already points at the VPS. Pushing doesn't deploy it,
   because the repo is pulled without a GitHub App. Deploy with **Redeploy** in Coolify.
