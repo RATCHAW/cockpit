@@ -1,0 +1,9 @@
+{
+  "extends": "@cockpit/tsconfig/react.json",
+  "compilerOptions": {
+    "paths": {
+      "@cockpit/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

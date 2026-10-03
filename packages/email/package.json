@@ -1,0 +1,30 @@
+{
+  "name": "@cockpit/email",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "email dev --dir src/templates --port 3001",
+    "lint": "eslint .",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@react-email/render": "^2.1.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-email": "^6.11.0",
+    "resend": "^6.32.0"
+  },
+  "devDependencies": {
+    "@cockpit/eslint-config": "workspace:*",
+    "@cockpit/tsconfig": "workspace:*",
+    "@react-email/ui": "^6.11.0",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "eslint": "catalog:",
+    "typescript": "catalog:"
+  }
+}

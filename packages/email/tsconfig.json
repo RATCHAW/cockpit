@@ -1,0 +1,7 @@
+{
+  "extends": "@cockpit/tsconfig/node.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}
