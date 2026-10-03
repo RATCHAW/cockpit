@@ -1,7 +1,7 @@
 import { schema } from "@cockpit/db"
 import { z } from "@hono/zod-openapi"
 import { and, eq, isNotNull, lte } from "drizzle-orm"
-import { Data, Effect } from "effect"
+import { Effect } from "effect"
 
 import {
   CATEGORIES,
@@ -12,19 +12,15 @@ import {
   type Currency,
 } from "../shared/finance"
 import { occurrence, occurrenceIndexFrom, today, type IsoDate } from "./dates"
+import { errorResponse } from "./openapi"
 import { Db, type Rates } from "./services"
 
-export class NotFoundError extends Data.TaggedError("NotFoundError")<{ entity: string }> {}
-
 // ── Shared schemas ────────────────────────────────────────────────────────────
-
-export const ErrorSchema = z.object({ error: z.string() }).openapi("Error")
 
 export const CurrencySchema = z.enum(CURRENCIES).openapi("Currency", { example: "MAD" })
 export const KindSchema = z.enum(TRANSACTION_KINDS).openapi("TransactionKind")
 export const FrequencySchema = z.enum(FREQUENCIES).openapi("Frequency")
 
-export const IsoDateSchema = z.iso.date().openapi({ example: "2026-10-03" })
 export const AmountSchema = z.number().positive().max(1_000_000_000_000).openapi({ example: 49.99 })
 export const DescriptionSchema = z.string().trim().min(1).max(120).openapi({ example: "Netflix" })
 export const CategorySchema = z
@@ -34,20 +30,8 @@ export const CategorySchema = z
   .max(40)
   .openapi({ example: CATEGORIES.expense[0] })
 
-export const IdParamSchema = z.object({ id: z.uuid() })
-
 /** `?currency=` override for any read endpoint; falls back to the user's display currency. */
 export const DisplayCurrencyQuery = z.object({ currency: CurrencySchema.optional() })
-
-export const errorResponse = (description: string) => ({
-  description,
-  content: { "application/json": { schema: ErrorSchema } },
-})
-
-export const jsonContent = <T extends z.ZodType>(schema: T, description: string) => ({
-  description,
-  content: { "application/json": { schema } },
-})
 
 export const ratesUnavailable = errorResponse("Exchange rates are temporarily unavailable")
 export const RATES_UNAVAILABLE = {

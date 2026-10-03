@@ -15,6 +15,13 @@
       "when": 1791031261065,
       "tag": "0001_abnormal_ken_ellis",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791032345903,
+      "tag": "0002_faulty_professor_monster",
+      "breakpoints": true
     }
   ]
 }

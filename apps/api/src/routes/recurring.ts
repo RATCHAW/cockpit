@@ -12,13 +12,8 @@ import {
   CurrencySchema,
   DescriptionSchema,
   DisplayCurrencyQuery,
-  errorResponse,
   FrequencySchema,
-  IdParamSchema,
-  IsoDateSchema,
-  jsonContent,
   KindSchema,
-  NotFoundError,
   RATES_UNAVAILABLE,
   ratesUnavailable,
   resolveDisplayCurrency,
@@ -26,6 +21,13 @@ import {
 } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
+import {
+  errorResponse,
+  IdParamSchema,
+  IsoDateSchema,
+  jsonContent,
+  NotFoundError,
+} from "../lib/openapi"
 import { Db, ExchangeRates, runtime } from "../lib/services"
 import type { Currency } from "../shared/finance"
 

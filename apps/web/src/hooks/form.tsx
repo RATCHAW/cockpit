@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@cockpit/ui/components/select"
+import { Textarea } from "@cockpit/ui/components/textarea"
 import { cn } from "@cockpit/ui/lib/utils"
 import { createFormHook, createFormHookContexts } from "@tanstack/react-form"
 import { EyeIcon, EyeOffIcon, LoaderCircleIcon } from "lucide-react"
@@ -58,6 +59,34 @@ function TextField({ label, hint, ...props }: TextFieldProps) {
   return (
     <FieldShell id={id} label={label} hint={hint} error={error}>
       <Input
+        id={id}
+        name={field.name}
+        value={field.state.value}
+        onChange={(e) => field.handleChange(e.target.value)}
+        onBlur={field.handleBlur}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        {...props}
+      />
+    </FieldShell>
+  )
+}
+
+type TextareaFieldProps = Omit<
+  ComponentProps<typeof Textarea>,
+  "id" | "value" | "onChange" | "onBlur"
+> & {
+  label: string
+  hint?: ReactNode
+}
+
+function TextareaField({ label, hint, ...props }: TextareaFieldProps) {
+  const id = useId()
+  const field = useFieldContext<string>()
+  const error = useFieldError()
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error}>
+      <Textarea
         id={id}
         name={field.name}
         value={field.state.value}
@@ -187,6 +216,6 @@ function SubmitButton({
 export const { useAppForm } = createFormHook({
   fieldContext,
   formContext,
-  fieldComponents: { TextField, PasswordField, SelectField },
+  fieldComponents: { TextField, TextareaField, PasswordField, SelectField },
   formComponents: { SubmitButton },
 })

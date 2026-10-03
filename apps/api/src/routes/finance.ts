@@ -9,8 +9,6 @@ import {
   convert,
   CurrencySchema,
   DisplayCurrencyQuery,
-  IsoDateSchema,
-  jsonContent,
   RATES_UNAVAILABLE,
   ratesUnavailable,
   resolveDisplayCurrency,
@@ -18,6 +16,7 @@ import {
 } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
+import { IsoDateSchema, jsonContent } from "../lib/openapi"
 import { Db, ExchangeRates, runtime } from "../lib/services"
 import { CURRENCIES, DEFAULT_CURRENCY } from "../shared/finance"
 

@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./client": "./src/client.ts",
-    "./finance": "./src/shared/finance.ts"
+    "./finance": "./src/shared/finance.ts",
+    "./projects": "./src/shared/projects.ts"
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",

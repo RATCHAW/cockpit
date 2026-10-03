@@ -26,6 +26,8 @@ import {
   LayoutGridIcon,
   LogOutIcon,
   SettingsIcon,
+  SquareKanbanIcon,
+  TargetIcon,
   WalletIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -35,11 +37,17 @@ import { Logo } from "~/components/logo"
 import { authClient, type Session } from "~/lib/auth-client"
 import { unwrap } from "~/lib/auth-errors"
 
-type NavItem = { title: string; to: "/" | "/finances" | "/settings"; icon: LucideIcon }
+type NavItem = {
+  title: string
+  to: "/" | "/finances" | "/projects" | "/board" | "/settings"
+  icon: LucideIcon
+}
 
 /** Sections get added here as they're built. */
 const nav: NavItem[] = [
   { title: "Overview", to: "/", icon: LayoutGridIcon },
+  { title: "Projects", to: "/projects", icon: TargetIcon },
+  { title: "Board", to: "/board", icon: SquareKanbanIcon },
   { title: "Finances", to: "/finances", icon: WalletIcon },
 ]
 
@@ -78,7 +86,8 @@ function NavMenu({ items }: { items: NavItem[] }) {
     <SidebarMenu>
       {items.map((item) => (
         <SidebarMenuItem key={item.title}>
-          <Link to={item.to} activeOptions={{ exact: true }}>
+          {/* Sections stay highlighted on their sub-pages (a single project, for example). */}
+          <Link to={item.to} activeOptions={{ exact: item.to === "/", includeSearch: false }}>
             {({ isActive }) => (
               <SidebarMenuButton asChild isActive={isActive}>
                 <span>

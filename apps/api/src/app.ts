@@ -8,10 +8,13 @@ import { config } from "./lib/config"
 import { createRouter } from "./lib/hono"
 import { sessionMiddleware } from "./lib/middleware"
 import { financeRoutes } from "./routes/finance"
+import { habitRoutes } from "./routes/habits"
 import { healthRoutes } from "./routes/health"
 import { meRoutes } from "./routes/me"
+import { projectRoutes } from "./routes/projects"
 import { recurringRoutes } from "./routes/recurring"
 import { settingsRoutes } from "./routes/settings"
+import { taskRoutes } from "./routes/tasks"
 import { transactionRoutes } from "./routes/transactions"
 
 const api = createRouter().basePath("/api")
@@ -39,6 +42,9 @@ export const app = api
   .route("/", financeRoutes)
   .route("/", transactionRoutes)
   .route("/", recurringRoutes)
+  .route("/", projectRoutes)
+  .route("/", habitRoutes)
+  .route("/", taskRoutes)
 
 app.doc31("/openapi.json", {
   openapi: "3.1.0",

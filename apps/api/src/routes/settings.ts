@@ -1,9 +1,10 @@
 import { schema } from "@cockpit/db"
 import { createRoute, z } from "@hono/zod-openapi"
 
-import { CurrencySchema, getSettings, jsonContent } from "../lib/finance"
+import { CurrencySchema, getSettings } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
+import { jsonContent } from "../lib/openapi"
 import { Db, runtime } from "../lib/services"
 
 const SettingsSchema = z
