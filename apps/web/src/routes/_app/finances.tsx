@@ -1,11 +1,4 @@
 import { Button } from "@cockpit/ui/components/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@cockpit/ui/components/select"
 import { useQuery } from "@tanstack/react-query"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { CircleAlertIcon, PlusIcon } from "lucide-react"
@@ -14,6 +7,7 @@ import { z } from "zod"
 
 import { CashflowChart } from "~/components/finance/cashflow-chart"
 import { CategoryBreakdown } from "~/components/finance/category-breakdown"
+import { CurrencySelect } from "~/components/finance/currency-select"
 import { PeriodPicker } from "~/components/finance/period-picker"
 import { ScheduleList } from "~/components/finance/schedule-list"
 import { SummaryTiles } from "~/components/finance/summary-tiles"
@@ -25,7 +19,6 @@ import { TransactionList } from "~/components/finance/transaction-list"
 import {
   CURRENCIES,
   currencyName,
-  currencyOptions,
   formatDate,
   PERIODS,
   periodRange,
@@ -77,32 +70,18 @@ function FinancesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Select
+          <CurrencySelect
             value={showing}
-            onValueChange={(value) =>
+            onChange={(value) =>
               void navigate({
                 search: (prev) => ({
                   ...prev,
-                  currency:
-                    value === settings.data?.displayCurrency
-                      ? undefined
-                      : (value as typeof prev.currency),
+                  currency: value === settings.data?.displayCurrency ? undefined : value,
                 }),
                 replace: true,
               })
             }
-          >
-            <SelectTrigger className="min-w-28 bg-canvas" aria-label="Show amounts in">
-              <SelectValue placeholder="Currency">{showing}</SelectValue>
-            </SelectTrigger>
-            <SelectContent position="popper" align="end" className="max-h-80">
-              {currencyOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
           <Button onClick={() => setDialog({ mode: "create" })}>
             <PlusIcon />
             Add transaction

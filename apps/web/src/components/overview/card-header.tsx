@@ -14,7 +14,7 @@ export function CardHeader({
   id: string
   title: ReactNode
   caption?: ReactNode
-  to: "/board" | "/finances" | "/projects"
+  to: "/board" | "/finances" | "/net-worth" | "/projects"
   linkLabel: string
   dark?: boolean
 }) {

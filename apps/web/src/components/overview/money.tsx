@@ -2,7 +2,14 @@ import { Skeleton } from "@cockpit/ui/components/skeleton"
 import { cn } from "@cockpit/ui/lib/utils"
 
 import { CardHeader } from "~/components/overview/card-header"
-import { formatDate, formatMoney, type Schedule, type Summary } from "~/lib/finance"
+import {
+  formatDate,
+  formatMonths,
+  formatMoney,
+  type NetWorth,
+  type Schedule,
+  type Summary,
+} from "~/lib/finance"
 import { addDays, relativeDays } from "~/lib/projects"
 
 /** Spending, income and net for the month so far. */
@@ -163,6 +170,51 @@ export function UpcomingBills({
           })}
         </ul>
       )}
+    </section>
+  )
+}
+
+/** Net worth and what's free to spend. Hidden until there's at least one account. */
+export function NetWorthCard({ data }: { data: NetWorth | undefined }) {
+  if (!data || data.history.length === 0) return null
+
+  const { totals, outlook, currency } = data
+
+  return (
+    <section
+      className="grid content-start gap-4 rounded-xl bg-canvas p-6"
+      aria-labelledby="net-worth-title"
+    >
+      <CardHeader
+        id="net-worth-title"
+        title="Net worth"
+        to="/net-worth"
+        linkLabel="Open net worth"
+      />
+      <p className="font-display text-display-md tabular-nums">
+        {formatMoney(totals.netWorth, currency)}
+      </p>
+      <dl className="grid grid-cols-2 gap-4 border-t border-canvas-soft pt-4">
+        <div className="grid gap-1">
+          <dt className="text-body-sm text-body">Free to spend</dt>
+          <dd
+            className={cn(
+              "text-body-md font-semibold tabular-nums",
+              outlook.freeToSpend < 0 && "text-negative-deep",
+            )}
+          >
+            {formatMoney(outlook.freeToSpend, currency)}
+          </dd>
+        </div>
+        {outlook.runwayMonths !== null ? (
+          <div className="grid gap-1">
+            <dt className="text-body-sm text-body">Runway</dt>
+            <dd className="text-body-md font-semibold tabular-nums">
+              {formatMonths(outlook.runwayMonths)}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
     </section>
   )
 }

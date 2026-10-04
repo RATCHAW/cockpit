@@ -7,6 +7,7 @@ import { auth } from "./lib/auth"
 import { config } from "./lib/config"
 import { createRouter } from "./lib/hono"
 import { sessionMiddleware } from "./lib/middleware"
+import { accountRoutes } from "./routes/accounts"
 import { financeRoutes } from "./routes/finance"
 import { habitRoutes } from "./routes/habits"
 import { healthRoutes } from "./routes/health"
@@ -42,6 +43,7 @@ export const app = api
   .route("/", financeRoutes)
   .route("/", transactionRoutes)
   .route("/", recurringRoutes)
+  .route("/", accountRoutes)
   .route("/", projectRoutes)
   .route("/", habitRoutes)
   .route("/", taskRoutes)

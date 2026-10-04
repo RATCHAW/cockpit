@@ -1,4 +1,5 @@
 import type { Seeder } from "../types"
+import { accountsSeeder } from "./accounts"
 import { financesSeeder } from "./finances"
 import { projectsSeeder } from "./projects"
 
@@ -25,4 +26,4 @@ import { projectsSeeder } from "./projects"
  * }
  * ```
  */
-export const seeders: Seeder[] = [financesSeeder, projectsSeeder]
+export const seeders: Seeder[] = [financesSeeder, accountsSeeder, projectsSeeder]

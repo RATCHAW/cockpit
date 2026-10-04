@@ -2,7 +2,7 @@ import { createDb, schema, type Database } from "@cockpit/db"
 import { inArray, sql } from "drizzle-orm"
 import { Context, Data, Effect, Layer, ManagedRuntime, Redacted } from "effect"
 
-import { CURRENCIES } from "../shared/finance"
+import { ASSETS, CRYPTO_ASSETS } from "../shared/finance"
 import { config } from "./config"
 import { today, type IsoDate } from "./dates"
 
@@ -28,7 +28,7 @@ export const DbLive = Layer.succeed(Db, {
 
 export class RatesError extends Data.TaggedError("RatesError")<{ cause: unknown }> {}
 
-/** Units of each supported currency per 1 USD. */
+/** Units of each supported currency (and crypto asset) per 1 USD. */
 export type Rates = Record<string, number>
 
 export class ExchangeRates extends Context.Service<
@@ -45,7 +45,7 @@ export class ExchangeRates extends Context.Service<
   }
 >()("cockpit/ExchangeRates") {}
 
-/** fawazahmed0/exchange-api: free, keyless, daily, covers MAD and every currency we list. */
+/** fawazahmed0/exchange-api: free, keyless, daily, covers MAD, crypto and every currency we list. */
 const PROVIDER_FIRST_DAY = "2024-03-02"
 const LATEST_TTL_MS = 60 * 60 * 1000
 
@@ -64,7 +64,7 @@ function fetchFromProvider(tag: IsoDate | "latest") {
         if (!res.ok) throw new Error(`${url} responded ${res.status}`)
         const body = (await res.json()) as { date: string; usd: Record<string, number> }
         const rates: Rates = { USD: 1 }
-        for (const code of CURRENCIES) {
+        for (const code of ASSETS) {
           const rate = body.usd[code.toLowerCase()]
           if (rate) rates[code] = rate
         }
@@ -82,7 +82,15 @@ export const ExchangeRatesLive = Layer.effect(
     let latest: { at: number; rates: Rates } | undefined
 
     const save = (date: IsoDate, rates: Rates) =>
-      db.query((db) => db.insert(schema.exchangeRate).values({ date, rates }).onConflictDoNothing())
+      db.query((db) =>
+        db
+          .insert(schema.exchangeRate)
+          .values({ date, rates })
+          .onConflictDoUpdate({
+            target: schema.exchangeRate.date,
+            set: { rates, fetchedAt: new Date() },
+          }),
+      )
 
     /** The cached day closest to `date` — the stand-in when the provider is down. */
     const closestCached = (date: IsoDate) =>
@@ -144,17 +152,26 @@ export const ExchangeRatesLive = Layer.effect(
         }
         if (keys.has("latest")) byKey.set("latest", yield* latestRates)
 
-        const missing = historical.filter((key) => !byKey.has(key))
+        // Days cached before crypto was supported lack those rates: refetch them, and keep the
+        // old row if the provider is down (fiat conversions still work with it).
+        const missing = historical.filter((key) => {
+          const cached = byKey.get(key)
+          return !cached || CRYPTO_ASSETS.some((code) => !cached[code])
+        })
         yield* Effect.forEach(
           missing,
-          (date) =>
-            withFallback(
-              date,
-              fetchFromProvider(date).pipe(
-                Effect.tap(({ rates }) => save(date, rates).pipe(Effect.ignore)),
-                Effect.map(({ rates }) => rates),
-              ),
-            ).pipe(Effect.tap((rates) => Effect.sync(() => byKey.set(date, rates)))),
+          (date) => {
+            const cached = byKey.get(date)
+            const fetched = fetchFromProvider(date).pipe(
+              Effect.tap(({ rates }) => save(date, rates).pipe(Effect.ignore)),
+              Effect.map(({ rates }) => rates),
+            )
+            return (
+              cached
+                ? fetched.pipe(Effect.orElseSucceed(() => cached))
+                : withFallback(date, fetched)
+            ).pipe(Effect.tap((rates) => Effect.sync(() => byKey.set(date, rates))))
+          },
           { concurrency: 8, discard: true },
         )
 

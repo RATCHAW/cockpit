@@ -4,6 +4,8 @@ import { and, eq, isNotNull, lte } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
+  ACCOUNT_TYPES,
+  ASSETS,
   CATEGORIES,
   CURRENCIES,
   DEFAULT_CURRENCY,
@@ -18,6 +20,8 @@ import { Db, type Rates } from "./services"
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
 export const CurrencySchema = z.enum(CURRENCIES).openapi("Currency", { example: "MAD" })
+export const AssetSchema = z.enum(ASSETS).openapi("Asset", { example: "USDT" })
+export const AccountTypeSchema = z.enum(ACCOUNT_TYPES).openapi("AccountType")
 export const KindSchema = z.enum(TRANSACTION_KINDS).openapi("TransactionKind")
 export const FrequencySchema = z.enum(FREQUENCIES).openapi("Frequency")
 

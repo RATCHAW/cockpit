@@ -1,5 +1,8 @@
 import {
+  ASSETS,
   CURRENCIES,
+  type AccountType,
+  type Asset,
   type Currency,
   type Frequency,
   type TransactionKind,
@@ -9,8 +12,14 @@ import { parseResponse, type InferResponseType } from "hono/client"
 
 import { api } from "./api"
 
-export { CATEGORIES, CURRENCIES, TRANSACTION_KINDS } from "@cockpit/api/finance"
-export type { Currency, Frequency, TransactionKind }
+export {
+  ACCOUNT_TYPES,
+  ASSETS,
+  CATEGORIES,
+  CURRENCIES,
+  TRANSACTION_KINDS,
+} from "@cockpit/api/finance"
+export type { AccountType, Asset, Currency, Frequency, TransactionKind }
 
 export type Summary = InferResponseType<typeof api.finance.summary.$get, 200>
 export type Transaction = InferResponseType<
@@ -19,6 +28,9 @@ export type Transaction = InferResponseType<
 >["items"][number]
 export type Schedule = InferResponseType<typeof api.finance.recurring.$get, 200>["items"][number]
 export type Settings = InferResponseType<typeof api.settings.$get, 200>
+export type AccountList = InferResponseType<typeof api.finance.accounts.$get, 200>
+export type Account = AccountList["items"][number]
+export type NetWorth = InferResponseType<(typeof api.finance)["net-worth"]["$get"], 200>
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +57,20 @@ export const recurringQueryOptions = (currency?: Currency) =>
   queryOptions({
     queryKey: [...financeKey, "recurring", { currency }],
     queryFn: () => parseResponse(api.finance.recurring.$get({ query: { currency } })),
+    placeholderData: keepPreviousData,
+  })
+
+export const accountsQueryOptions = (currency?: Currency) =>
+  queryOptions({
+    queryKey: [...financeKey, "accounts", { currency }],
+    queryFn: () => parseResponse(api.finance.accounts.$get({ query: { currency } })),
+    placeholderData: keepPreviousData,
+  })
+
+export const netWorthQueryOptions = (currency?: Currency) =>
+  queryOptions({
+    queryKey: [...financeKey, "net-worth", { currency }],
+    queryFn: () => parseResponse(api.finance["net-worth"].$get({ query: { currency } })),
     placeholderData: keepPreviousData,
   })
 
@@ -85,11 +111,63 @@ export function formatMoney(
   return format.format(amount)
 }
 
+const isCurrency = (code: string): code is Currency =>
+  (CURRENCIES as readonly string[]).includes(code)
+
+const STABLECOINS = new Set(["USDT", "USDC"])
+const cryptoFormats = new Map<string, Intl.NumberFormat>()
+
+/** Like `formatMoney`, but also takes crypto: "0.0421 BTC", "3,150.00 USDT". */
+export function formatAsset(
+  amount: number,
+  asset: string,
+  options: { compact?: boolean; sign?: boolean } = {},
+) {
+  if (isCurrency(asset)) return formatMoney(amount, asset, options)
+  const digits = STABLECOINS.has(asset) ? 2 : 8
+  const key = `${digits}|${options.sign}`
+  let format = cryptoFormats.get(key)
+  if (!format) {
+    format = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: digits === 2 ? 2 : 0,
+      maximumFractionDigits: digits,
+      signDisplay: options.sign ? "exceptZero" : "auto",
+    })
+    cryptoFormats.set(key, format)
+  }
+  return `${format.format(amount)} ${asset}`
+}
+
+export const assetOptions = ASSETS.map((code) => ({
+  value: code,
+  label: isCurrency(code) ? `${code} · ${currencyName(code)}` : `${code} · Crypto`,
+}))
+
+export const ACCOUNT_TYPE_LABELS = {
+  bank: "Bank",
+  cash: "Cash",
+  wallet: "Online wallet",
+  crypto: "Crypto",
+  savings: "Savings",
+  investment: "Investments",
+} as const satisfies Record<AccountType, string>
+
+/** Savings and investments start out set aside; everything else is spendable. */
+export const spendableByDefault = (type: AccountType) => type !== "savings" && type !== "investment"
+
+/** "3 months", "1.5 years". */
+export function formatMonths(months: number) {
+  if (months >= 24) return `${Math.round(months / 1.2) / 10} years`
+  const rounded = months < 10 ? Math.round(months * 10) / 10 : Math.round(months)
+  return `${rounded} ${rounded === 1 ? "month" : "months"}`
+}
+
 /** Parses "1 234,50" or "1,234.50" style input. Returns NaN when it isn't a number. */
 export function parseAmount(input: string) {
   const cleaned = input.replace(/[\s\u00a0']/g, "")
-  // A comma followed by exactly 1–2 digits at the end is a decimal separator.
-  const normalized = /,\d{1,2}$/.test(cleaned)
+  // A comma followed by exactly 1–2 digits at the end is a decimal separator, and so is the
+  // comma in "0,0421" (crypto amounts).
+  const normalized = /,\d{1,2}$|^-?0,\d+$/.test(cleaned)
     ? cleaned.replace(/\./g, "").replace(",", ".")
     : cleaned.replace(/,/g, "")
   return normalized === "" ? NaN : Number(normalized)

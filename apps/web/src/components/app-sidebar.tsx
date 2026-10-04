@@ -23,6 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronsUpDownIcon,
+  LandmarkIcon,
   LayoutGridIcon,
   LogOutIcon,
   SettingsIcon,
@@ -39,7 +40,7 @@ import { unwrap } from "~/lib/auth-errors"
 
 type NavItem = {
   title: string
-  to: "/" | "/finances" | "/projects" | "/board" | "/settings"
+  to: "/" | "/finances" | "/net-worth" | "/projects" | "/board" | "/settings"
   icon: LucideIcon
 }
 
@@ -49,6 +50,7 @@ const nav: NavItem[] = [
   { title: "Projects", to: "/projects", icon: TargetIcon },
   { title: "Board", to: "/board", icon: SquareKanbanIcon },
   { title: "Finances", to: "/finances", icon: WalletIcon },
+  { title: "Net worth", to: "/net-worth", icon: LandmarkIcon },
 ]
 
 const accountNav: NavItem[] = [{ title: "Settings", to: "/settings", icon: SettingsIcon }]

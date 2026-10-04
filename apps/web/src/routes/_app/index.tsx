@@ -4,11 +4,12 @@ import { useState } from "react"
 
 import { TaskDialog, type TaskDialogState } from "~/components/board/task-dialog"
 import { Deadlines } from "~/components/overview/deadlines"
-import { MonthMoney, UpcomingBills } from "~/components/overview/money"
+import { MonthMoney, NetWorthCard, UpcomingBills } from "~/components/overview/money"
 import { UpNext } from "~/components/overview/up-next"
 import { TodayHabits } from "~/components/projects/today-habits"
 import {
   formatDate,
+  netWorthQueryOptions,
   periodRange,
   recurringQueryOptions,
   settingsQueryOptions,
@@ -79,6 +80,7 @@ function OverviewPage() {
   const month = { ...periodRange("month"), currency }
   const summary = useQuery({ ...summaryQueryOptions(month), enabled: !!currency })
   const recurring = useQuery({ ...recurringQueryOptions(currency), enabled: !!currency })
+  const netWorth = useQuery({ ...netWorthQueryOptions(currency), enabled: !!currency })
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-8">
@@ -119,6 +121,7 @@ function OverviewPage() {
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
           <MonthMoney summary={summary.data} failed={summary.isError} today={today} />
+          <NetWorthCard data={netWorth.data} />
           <UpcomingBills data={recurring.data} today={today} />
           <Deadlines projects={allProjects} today={today} />
         </div>

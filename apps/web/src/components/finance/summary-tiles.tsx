@@ -48,7 +48,7 @@ export function SummaryTiles({ summary }: { summary: Summary | undefined }) {
   )
 }
 
-function Tile({
+export function Tile({
   label,
   value,
   caption,
