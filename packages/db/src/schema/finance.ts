@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -22,6 +23,14 @@ export const recurrenceFrequency = pgEnum("recurrence_frequency", [
   "weekly",
   "monthly",
   "yearly",
+])
+export const accountType = pgEnum("account_type", [
+  "bank",
+  "cash",
+  "wallet",
+  "crypto",
+  "savings",
+  "investment",
 ])
 
 const timestamps = {
@@ -62,6 +71,8 @@ export const recurringTransaction = pgTable(
     currency: text().notNull(),
     description: text().notNull(),
     category: text().notNull(),
+    /** Account each booked occurrence is paid from or into. */
+    accountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
     frequency: recurrenceFrequency().notNull(),
     /** Every `interval` × `frequency`, e.g. 3 × monthly = quarterly. */
     interval: integer().notNull().default(1),
@@ -89,30 +100,127 @@ export const transaction = pgTable(
     description: text().notNull(),
     category: text().notNull(),
     date: date({ mode: "string" }).notNull(),
+    /**
+     * Where the money came out of or went into. Null for transactions logged before accounts
+     * existed, or whose account was deleted.
+     */
+    accountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
     recurringId: uuid().references(() => recurringTransaction.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
     index().on(t.userId, t.date),
+    index().on(t.accountId, t.date),
     // A schedule books each occurrence at most once.
     uniqueIndex().on(t.recurringId, t.date),
   ],
 )
 
-/** Daily FX snapshot: units of each currency per 1 USD. Historical rows never change. */
+/**
+ * Daily FX snapshot: units of each currency per 1 USD. Rows only change to fill in codes that
+ * were added after the day was first cached (crypto, for example).
+ */
 export const exchangeRate = pgTable("exchange_rate", {
   date: date({ mode: "string" }).primaryKey(),
   rates: jsonb().$type<Record<string, number>>().notNull(),
   fetchedAt: timestamp().defaultNow().notNull(),
 })
 
-export const recurringTransactionRelations = relations(recurringTransaction, ({ many }) => ({
+/**
+ * Somewhere money is kept: a bank account, a Binance wallet, cash in a drawer. Holds a single
+ * currency (or crypto asset); its balance is the latest `balanceSnapshot` plus the transactions
+ * and transfers on it since.
+ */
+export const financeAccount = pgTable(
+  "finance_account",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    type: accountType().notNull(),
+    /** ISO 4217 code or a crypto ticker (USDT, BTC). Fixed once created. */
+    currency: text().notNull(),
+    /** Money you'd spend day to day, as opposed to savings and investments you've set aside. */
+    spendable: boolean().notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [index().on(t.userId)],
+)
+
+/**
+ * An account's balance as you checked it on a day. Transactions on the account that come after
+ * it (a later day, or the same day but logged after it) move the balance from there; earlier
+ * ones are taken as already counted. Updating twice on the same day overwrites. Negative for
+ * debts.
+ */
+export const balanceSnapshot = pgTable(
+  "balance_snapshot",
+  {
+    accountId: uuid()
+      .notNull()
+      .references(() => financeAccount.id, { onDelete: "cascade" }),
+    date: date({ mode: "string" }).notNull(),
+    /** Crypto needs more decimals than fiat (0.00412 BTC). */
+    amount: numeric({ precision: 30, scale: 10, mode: "number" }).notNull(),
+    ...timestamps,
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.date] })],
+)
+
+/**
+ * Money moved between two of your accounts: cash taken out of the bank, dirhams turned into
+ * USDT. It's neither income nor spending, so it only moves balances. On each side it counts like
+ * a transaction: a balance recorded after it already includes it.
+ */
+export const transfer = pgTable(
+  "transfer",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Null once the account is deleted; the other side still counts. */
+    fromAccountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
+    toAccountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
+    /** What left `fromAccountId`, in its currency. Always positive. */
+    amount: numeric({ precision: 30, scale: 10, mode: "number" }).notNull(),
+    /** What reached `toAccountId`, in its currency. Differs across currencies or after fees. */
+    received: numeric({ precision: 30, scale: 10, mode: "number" }).notNull(),
+    date: date({ mode: "string" }).notNull(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.userId, t.date)],
+)
+
+export const recurringTransactionRelations = relations(recurringTransaction, ({ one, many }) => ({
   transactions: many(transaction),
+  account: one(financeAccount, {
+    fields: [recurringTransaction.accountId],
+    references: [financeAccount.id],
+  }),
 }))
 
 export const transactionRelations = relations(transaction, ({ one }) => ({
   recurring: one(recurringTransaction, {
     fields: [transaction.recurringId],
     references: [recurringTransaction.id],
+  }),
+  account: one(financeAccount, {
+    fields: [transaction.accountId],
+    references: [financeAccount.id],
+  }),
+}))
+
+export const financeAccountRelations = relations(financeAccount, ({ many }) => ({
+  balances: many(balanceSnapshot),
+  transactions: many(transaction),
+}))
+
+export const balanceSnapshotRelations = relations(balanceSnapshot, ({ one }) => ({
+  account: one(financeAccount, {
+    fields: [balanceSnapshot.accountId],
+    references: [financeAccount.id],
   }),
 }))

@@ -7,6 +7,7 @@ import { auth } from "./lib/auth"
 import { config } from "./lib/config"
 import { createRouter } from "./lib/hono"
 import { sessionMiddleware } from "./lib/middleware"
+import { accountRoutes } from "./routes/accounts"
 import { financeRoutes } from "./routes/finance"
 import { habitRoutes } from "./routes/habits"
 import { healthRoutes } from "./routes/health"
@@ -16,6 +17,7 @@ import { recurringRoutes } from "./routes/recurring"
 import { settingsRoutes } from "./routes/settings"
 import { taskRoutes } from "./routes/tasks"
 import { transactionRoutes } from "./routes/transactions"
+import { transferRoutes } from "./routes/transfers"
 
 const api = createRouter().basePath("/api")
 
@@ -42,6 +44,8 @@ export const app = api
   .route("/", financeRoutes)
   .route("/", transactionRoutes)
   .route("/", recurringRoutes)
+  .route("/", accountRoutes)
+  .route("/", transferRoutes)
   .route("/", projectRoutes)
   .route("/", habitRoutes)
   .route("/", taskRoutes)

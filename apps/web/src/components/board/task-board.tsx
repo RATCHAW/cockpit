@@ -38,6 +38,7 @@ import { useCallback, useMemo, useRef, useState, type ComponentProps } from "rea
 import { toast } from "sonner"
 
 import { CheckButton } from "~/components/projects/check-button"
+import { useMoveTask } from "~/hooks/use-move-task"
 import { api } from "~/lib/api"
 import {
   formatShortDate,
@@ -45,14 +46,12 @@ import {
   refreshProjectsAndTasks,
   TASK_STATUS_LABELS,
   TASK_STATUSES,
-  tasksKey,
   type Project,
   type Task,
   type TaskStatus,
 } from "~/lib/projects"
 
 type Columns = Record<TaskStatus, Task[]>
-type TaskList = { items: Task[] }
 
 /** Done piles up; older cards stay out of the way until asked for. */
 const DONE_VISIBLE = 12
@@ -102,7 +101,6 @@ export function TaskBoard({
   newTaskProjectId?: string | null
   onOpen: (task: Task) => void
 }) {
-  const queryClient = useQueryClient()
   const columns = useMemo(() => group(tasks ?? []), [tasks])
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
 
@@ -144,42 +142,7 @@ export function TaskBoard({
     }),
   )
 
-  const move = useMutation({
-    mutationFn: (vars: { id: string; status: TaskStatus; position?: number }) =>
-      parseResponse(
-        api.tasks[":id"].$patch({
-          param: { id: vars.id },
-          json: { status: vars.status, position: vars.position },
-        }),
-      ),
-    onError: () => {
-      toast.error("Couldn't move that task. Try again.")
-    },
-    onSettled: () => refreshProjectsAndTasks(queryClient),
-  })
-
-  /** Applies a move to the cache right away — before the request, so the drop doesn't flicker. */
-  function moveTask(id: string, status: TaskStatus, position: number) {
-    void queryClient.cancelQueries({ queryKey: tasksKey })
-    queryClient.setQueryData<TaskList>(tasksKey, (data) =>
-      data
-        ? {
-            items: data.items.map((t) =>
-              t.id === id
-                ? {
-                    ...t,
-                    status,
-                    position,
-                    completedAt:
-                      status === "done" ? (t.completedAt ?? new Date().toISOString()) : null,
-                  }
-                : t,
-            ),
-          }
-        : data,
-    )
-    move.mutate({ id, status, position })
-  }
+  const moveTask = useMoveTask()
 
   function toggleDone(task: Task) {
     const status: TaskStatus = task.status === "done" ? "todo" : "done"
@@ -490,7 +453,7 @@ function TaskCard({
   )
 }
 
-function Chip({ className, ...props }: ComponentProps<"span">) {
+export function Chip({ className, ...props }: ComponentProps<"span">) {
   return (
     <span
       className={cn(

@@ -1,23 +1,28 @@
 import { schema } from "@cockpit/db"
 import { z } from "@hono/zod-openapi"
 import { and, eq, isNotNull, lte } from "drizzle-orm"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 
 import {
+  ACCOUNT_TYPES,
+  ASSETS,
   CATEGORIES,
+  CRYPTO_ASSETS,
   CURRENCIES,
   DEFAULT_CURRENCY,
   FREQUENCIES,
   TRANSACTION_KINDS,
   type Currency,
 } from "../shared/finance"
-import { occurrence, occurrenceIndexFrom, today, type IsoDate } from "./dates"
-import { errorResponse } from "./openapi"
+import { addDays, occurrence, occurrenceIndexFrom, today, type IsoDate } from "./dates"
+import { errorResponse, IsoDateSchema } from "./openapi"
 import { Db, type Rates } from "./services"
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
 
 export const CurrencySchema = z.enum(CURRENCIES).openapi("Currency", { example: "MAD" })
+export const AssetSchema = z.enum(ASSETS).openapi("Asset", { example: "USDT" })
+export const AccountTypeSchema = z.enum(ACCOUNT_TYPES).openapi("AccountType")
 export const KindSchema = z.enum(TRANSACTION_KINDS).openapi("TransactionKind")
 export const FrequencySchema = z.enum(FREQUENCIES).openapi("Frequency")
 
@@ -33,10 +38,49 @@ export const CategorySchema = z
 /** `?currency=` override for any read endpoint; falls back to the user's display currency. */
 export const DisplayCurrencyQuery = z.object({ currency: CurrencySchema.optional() })
 
+/** The account money came out of or went into. Null when there's none to pick. */
+export const AccountIdSchema = z.uuid().nullable().openapi({ example: null })
+
+/** Balances are as of a day; a little slack lets a client a timezone ahead say "today". */
+export const BalanceDateSchema = IsoDateSchema.refine((date) => date <= addDays(today(), 1), {
+  message: "Balance date can't be in the future",
+})
+
 export const ratesUnavailable = errorResponse("Exchange rates are temporarily unavailable")
 export const RATES_UNAVAILABLE = {
   error: "Exchange rates are temporarily unavailable. Try again shortly.",
 }
+
+// ── Accounts ──────────────────────────────────────────────────────────────────
+
+export class UnknownAccountError extends Data.TaggedError("UnknownAccountError")<{
+  accountId: string
+}> {}
+
+export const unknownAccount = errorResponse("No account with that id")
+export const UNKNOWN_ACCOUNT = { error: "That account doesn't exist. It may have been deleted." }
+
+/** Fails unless `accountId` is unset or one of the user's accounts. */
+export const checkAccount = (userId: string, accountId: string | null | undefined) =>
+  accountId
+    ? Db.use((db) =>
+        db.query((db) =>
+          db
+            .select({ id: schema.financeAccount.id })
+            .from(schema.financeAccount)
+            .where(
+              and(
+                eq(schema.financeAccount.id, accountId),
+                eq(schema.financeAccount.userId, userId),
+              ),
+            ),
+        ),
+      ).pipe(
+        Effect.flatMap(([row]) =>
+          row ? Effect.void : Effect.fail(new UnknownAccountError({ accountId })),
+        ),
+      )
+    : Effect.void
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +119,10 @@ export const round = (value: number, digits = 2) => {
   const f = 10 ** digits
   return Math.round(value * f) / f
 }
+
+/** Fiat to the cent; crypto keeps the decimals a balance is stored with. */
+export const roundBalance = (amount: number, asset: string) =>
+  round(amount, (CRYPTO_ASSETS as readonly string[]).includes(asset) ? 10 : 2)
 
 /** Converts via USD, which every rate is quoted against. */
 export function convert(amount: number, from: string, to: string, rates: Rates) {
@@ -136,6 +184,7 @@ export const bookDueOccurrences = (userId: string) =>
                     description: rule.description,
                     category: rule.category,
                     date,
+                    accountId: rule.accountId,
                     recurringId: rule.id,
                   })),
                 )

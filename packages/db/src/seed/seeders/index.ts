@@ -1,4 +1,5 @@
 import type { Seeder } from "../types"
+import { accountsSeeder } from "./accounts"
 import { financesSeeder } from "./finances"
 import { projectsSeeder } from "./projects"
 
@@ -25,4 +26,5 @@ import { projectsSeeder } from "./projects"
  * }
  * ```
  */
-export const seeders: Seeder[] = [financesSeeder, projectsSeeder]
+// Accounts come first so the finance demo can say which account each transaction used.
+export const seeders: Seeder[] = [accountsSeeder, financesSeeder, projectsSeeder]
