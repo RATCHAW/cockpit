@@ -17,6 +17,7 @@ import { recurringRoutes } from "./routes/recurring"
 import { settingsRoutes } from "./routes/settings"
 import { taskRoutes } from "./routes/tasks"
 import { transactionRoutes } from "./routes/transactions"
+import { transferRoutes } from "./routes/transfers"
 
 const api = createRouter().basePath("/api")
 
@@ -44,6 +45,7 @@ export const app = api
   .route("/", transactionRoutes)
   .route("/", recurringRoutes)
   .route("/", accountRoutes)
+  .route("/", transferRoutes)
   .route("/", projectRoutes)
   .route("/", habitRoutes)
   .route("/", taskRoutes)

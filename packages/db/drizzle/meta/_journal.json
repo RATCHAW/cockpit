@@ -36,6 +36,13 @@
       "when": 1792141623940,
       "tag": "0004_equal_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792162380429,
+      "tag": "0005_low_beyonder",
+      "breakpoints": true
     }
   ]
 }

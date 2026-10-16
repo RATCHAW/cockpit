@@ -129,6 +129,7 @@ function NetWorthPage() {
         state={dialog}
         onClose={() => setDialog(null)}
         defaultCurrency={settings.data?.defaultCurrency ?? "USD"}
+        accounts={accounts.data?.items ?? []}
       />
     </div>
   )
