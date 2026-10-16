@@ -4,9 +4,11 @@ import { and, desc, eq, gte, lte } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
+  AccountIdSchema,
   AmountSchema,
   bookDueOccurrences,
   CategorySchema,
+  checkAccount,
   convert,
   CurrencySchema,
   DescriptionSchema,
@@ -16,6 +18,8 @@ import {
   ratesUnavailable,
   resolveDisplayCurrency,
   round,
+  UNKNOWN_ACCOUNT,
+  unknownAccount,
 } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
@@ -37,11 +41,13 @@ const TransactionInputSchema = z
     description: DescriptionSchema,
     category: CategorySchema,
     date: IsoDateSchema,
+    accountId: AccountIdSchema.optional(),
   })
   .openapi("TransactionInput")
 
 const TransactionSchema = TransactionInputSchema.extend({
   id: z.uuid(),
+  accountId: AccountIdSchema,
   /** Set when the transaction was booked by a schedule. */
   recurringId: z.uuid().nullable(),
 }).openapi("Transaction")
@@ -65,6 +71,7 @@ const toDto = (row: Row) => ({
   description: row.description,
   category: row.category,
   date: row.date,
+  accountId: row.accountId,
   recurringId: row.recurringId,
 })
 
@@ -97,6 +104,9 @@ const createTransactionRoute = createRoute({
   path: "/finance/transactions",
   tags: ["Finance"],
   summary: "Add a transaction",
+  description:
+    "Logs money in or out. With an `accountId`, it moves that account's balance unless the " +
+    "balance you last recorded already covers it (it's dated earlier).",
   middleware: [requireAuth] as const,
   request: {
     body: { content: { "application/json": { schema: TransactionInputSchema } }, required: true },
@@ -104,6 +114,7 @@ const createTransactionRoute = createRoute({
   responses: {
     201: jsonContent(TransactionSchema, "The created transaction"),
     401: { description: "Not signed in" },
+    422: unknownAccount,
   },
 })
 
@@ -124,6 +135,7 @@ const updateRoute = createRoute({
     200: jsonContent(TransactionSchema, "The updated transaction"),
     401: { description: "Not signed in" },
     404: notFound,
+    422: unknownAccount,
   },
 })
 
@@ -184,31 +196,43 @@ export const transactionRoutes = createRouter()
       ),
     )
   })
-  .openapi(createTransactionRoute, async (c) => {
+  .openapi(createTransactionRoute, (c) => {
     const user = c.get("user")
     const input = c.req.valid("json")
-    const [row] = await runtime.runPromise(
-      Db.use((db) =>
+
+    const program = Effect.gen(function* () {
+      yield* checkAccount(user.id, input.accountId)
+      const [row] = yield* Db.use((db) =>
         db.query((db) =>
           db
             .insert(schema.transaction)
             .values({ ...input, userId: user.id })
             .returning(),
         ),
+      )
+      return row!
+    })
+
+    return runtime.runPromise(
+      program.pipe(
+        Effect.map((row) => c.json(toDto(row), 201)),
+        Effect.catchTag("UnknownAccountError", () => Effect.succeed(c.json(UNKNOWN_ACCOUNT, 422))),
       ),
     )
-    return c.json(toDto(row!), 201)
   })
   .openapi(updateRoute, (c) => {
     const user = c.get("user")
     const { id } = c.req.valid("param")
     const input = c.req.valid("json")
 
-    const program = Db.use((db) =>
-      db.query((db) =>
-        db.update(schema.transaction).set(input).where(owned(user.id, id)).returning(),
+    const program = checkAccount(user.id, input.accountId).pipe(
+      Effect.andThen(
+        Db.use((db) =>
+          db.query((db) =>
+            db.update(schema.transaction).set(input).where(owned(user.id, id)).returning(),
+          ),
+        ),
       ),
-    ).pipe(
       Effect.flatMap(([row]) =>
         row ? Effect.succeed(row) : Effect.fail(new NotFoundError({ entity: "transaction" })),
       ),
@@ -220,6 +244,7 @@ export const transactionRoutes = createRouter()
         Effect.catchTag("NotFoundError", () =>
           Effect.succeed(c.json({ error: "Transaction not found" }, 404)),
         ),
+        Effect.catchTag("UnknownAccountError", () => Effect.succeed(c.json(UNKNOWN_ACCOUNT, 422))),
       ),
     )
   })
