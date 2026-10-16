@@ -17,6 +17,7 @@ import {
 } from "~/components/finance/transaction-dialog"
 import { TransactionList } from "~/components/finance/transaction-list"
 import {
+  accountsQueryOptions,
   CURRENCIES,
   currencyName,
   formatDate,
@@ -56,6 +57,7 @@ function FinancesPage() {
   const summary = useQuery({ ...summaryQueryOptions(range), enabled: !!currency })
   const transactions = useQuery({ ...transactionsQueryOptions(range), enabled: !!currency })
   const recurring = useQuery({ ...recurringQueryOptions(currency), enabled: !!currency })
+  const accounts = useQuery({ ...accountsQueryOptions(currency), enabled: !!currency })
 
   const failed = summary.isError || transactions.isError || recurring.isError
   const showing = summary.data?.currency ?? currency
@@ -140,6 +142,7 @@ function FinancesPage() {
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <TransactionList
           items={transactions.data?.items}
+          accounts={accounts.data?.items}
           currency={transactions.data?.currency ?? showing ?? "USD"}
           onSelect={(transaction) => setDialog({ mode: "edit", transaction })}
           onAdd={() => setDialog({ mode: "create" })}
@@ -147,6 +150,7 @@ function FinancesPage() {
         <div className="grid gap-6">
           <ScheduleList
             data={recurring.data}
+            accounts={accounts.data?.items}
             onEdit={(schedule) => setDialog({ mode: "schedule", schedule })}
             onAdd={() => setDialog({ mode: "create", repeat: "monthly" })}
           />
@@ -158,6 +162,11 @@ function FinancesPage() {
         state={dialog}
         onClose={() => setDialog(null)}
         defaultCurrency={settings.data?.defaultCurrency ?? "USD"}
+        accounts={accounts.data?.items ?? []}
+        lastAccountId={
+          transactions.data?.items.find((t) => t.accountId && !t.recurringId)?.accountId ??
+          undefined
+        }
       />
     </div>
   )

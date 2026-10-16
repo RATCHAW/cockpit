@@ -1,6 +1,6 @@
 import { schema } from "@cockpit/db"
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lt, lte } from "drizzle-orm"
 import { Effect } from "effect"
 
 import {
@@ -35,7 +35,7 @@ import {
   NotFoundError,
 } from "../lib/openapi"
 import { Db, ExchangeRates, runtime } from "../lib/services"
-import { SAFETY_NET_MONTHS, type Asset } from "../shared/finance"
+import { CRYPTO_ASSETS, SAFETY_NET_MONTHS, type Asset } from "../shared/finance"
 
 /** How far ahead scheduled bills and income count towards what's free to spend. */
 const OUTLOOK_DAYS = 30
@@ -85,8 +85,9 @@ const AccountSchema = z
     type: AccountTypeSchema,
     currency: AssetSchema,
     spendable: z.boolean(),
+    /** The latest recorded balance plus the transactions on the account since. */
     balance: z.number(),
-    /** Day of the latest balance. */
+    /** Day the balance was last recorded. */
     updatedOn: IsoDateSchema,
   })
   .openapi("Account")
@@ -165,7 +166,93 @@ const notFound = errorResponse("Account not found")
 const owned = (userId: string, id: string) =>
   and(eq(schema.financeAccount.id, id), eq(schema.financeAccount.userId, userId))
 
-/** Every account with its latest balance, oldest account first. */
+/** Something that sets or moves an account's balance. */
+type LedgerEntry = {
+  accountId: string
+  date: IsoDate
+  /** When it was recorded: orders a balance and a transaction that share a day. */
+  at: Date
+} & (
+  | { type: "balance"; amount: number }
+  /** Signed, in the account's currency. */
+  | { type: "transaction"; amount: number }
+)
+
+/**
+ * Replays recorded balances and transactions in the order they happened. A recorded balance
+ * replaces whatever came before it; a transaction moves the balance on from there. Transactions
+ * before an account's first balance are taken as already counted in it.
+ *
+ * Returns each account's balance at the end of a day. Call it with ascending days.
+ */
+function replay(entries: LedgerEntry[]) {
+  const sorted = [...entries].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.at.getTime() - b.at.getTime(),
+  )
+  const balances = new Map<string, number>()
+  let next = 0
+  return (date: IsoDate): ReadonlyMap<string, number> => {
+    for (; next < sorted.length && sorted[next]!.date <= date; next++) {
+      const entry = sorted[next]!
+      const current = balances.get(entry.accountId)
+      if (entry.type === "balance") balances.set(entry.accountId, entry.amount)
+      else if (current !== undefined) balances.set(entry.accountId, current + entry.amount)
+    }
+    return balances
+  }
+}
+
+/** Transactions on the user's accounts dated `from`..`to`, converted to each account's currency. */
+const transactionEntries = (userId: string, from: IsoDate, to: IsoDate) =>
+  Effect.gen(function* () {
+    const rows = yield* Db.use((db) =>
+      db.query((db) =>
+        db
+          .select({
+            accountId: schema.financeAccount.id,
+            accountCurrency: schema.financeAccount.currency,
+            kind: schema.transaction.kind,
+            amount: schema.transaction.amount,
+            currency: schema.transaction.currency,
+            date: schema.transaction.date,
+            at: schema.transaction.createdAt,
+          })
+          .from(schema.transaction)
+          .innerJoin(
+            schema.financeAccount,
+            eq(schema.transaction.accountId, schema.financeAccount.id),
+          )
+          .where(
+            and(
+              eq(schema.financeAccount.userId, userId),
+              gte(schema.transaction.date, from),
+              lte(schema.transaction.date, to),
+            ),
+          ),
+      ),
+    )
+    const foreign = rows.filter((row) => row.currency !== row.accountCurrency)
+    const rates = yield* ExchangeRates.use((fx) => fx.forDates(foreign.map((row) => row.date)))
+    return rows.map((row): LedgerEntry => {
+      const amount =
+        row.currency === row.accountCurrency
+          ? row.amount
+          : convert(row.amount, row.currency, row.accountCurrency, rates.get(row.date)!)
+      return {
+        type: "transaction",
+        accountId: row.accountId,
+        date: row.date,
+        at: row.at,
+        amount: row.kind === "income" ? amount : -amount,
+      }
+    })
+  })
+
+/** Fiat to the cent; crypto keeps the decimals a balance is stored with. */
+const roundBalance = (amount: number, asset: string) =>
+  round(amount, (CRYPTO_ASSETS as readonly string[]).includes(asset) ? 10 : 2)
+
+/** Every account with its current balance, oldest account first. */
 const loadAccounts = (userId: string) =>
   Effect.gen(function* () {
     const db = yield* Db
@@ -183,6 +270,7 @@ const loadAccounts = (userId: string) =>
           accountId: schema.balanceSnapshot.accountId,
           amount: schema.balanceSnapshot.amount,
           date: schema.balanceSnapshot.date,
+          at: schema.balanceSnapshot.updatedAt,
         })
         .from(schema.balanceSnapshot)
         .where(
@@ -194,8 +282,23 @@ const loadAccounts = (userId: string) =>
         .orderBy(schema.balanceSnapshot.accountId, desc(schema.balanceSnapshot.date)),
     )
     const byAccount = new Map(latest.map((row) => [row.accountId, row]))
+
+    // Balances can be recorded a day ahead (see `BalanceDateSchema`), so count up to then too.
+    const until = addDays(today(), 1)
+    const since = latest.reduce((min, row) => (row.date < min ? row.date : min), until)
+    const moves = yield* transactionEntries(userId, since, until)
+    const balances = replay([
+      ...latest.map((row): LedgerEntry => ({ type: "balance", ...row })),
+      ...moves,
+    ])(until)
+
     // Every account is created with a balance, so a snapshot always exists.
-    return accounts.map((row) => toDto(row, byAccount.get(row.id)!))
+    return accounts.map((row) =>
+      toDto(row, {
+        amount: roundBalance(balances.get(row.id)!, row.currency),
+        date: byAccount.get(row.id)!.date,
+      }),
+    )
   })
 
 type Account = ReturnType<typeof toDto>
@@ -256,6 +359,7 @@ const netWorthHistory = (userId: string, currency: string) =>
             accountId: schema.balanceSnapshot.accountId,
             currency: schema.financeAccount.currency,
             date: schema.balanceSnapshot.date,
+            at: schema.balanceSnapshot.updatedAt,
             amount: schema.balanceSnapshot.amount,
           })
           .from(schema.balanceSnapshot)
@@ -269,20 +373,25 @@ const netWorthHistory = (userId: string, currency: string) =>
     )
     if (snapshots.length === 0) return []
 
-    const dates = historyDates(snapshots[0]!.date, today())
-    const rates = yield* ExchangeRates.use((fx) => fx.forDates(dates))
+    const now = today()
+    const dates = historyDates(snapshots[0]!.date, now)
+    const [rates, moves] = yield* Effect.all(
+      [
+        ExchangeRates.use((fx) => fx.forDates(dates)),
+        transactionEntries(userId, snapshots[0]!.date, now),
+      ],
+      { concurrency: "unbounded" },
+    )
 
-    // Walk the snapshots in date order once, carrying each account's latest balance forward.
-    const current = new Map<string, { amount: number; currency: string }>()
-    let next = 0
+    const currencyOf = new Map(snapshots.map((s) => [s.accountId, s.currency]))
+    const balancesAt = replay([
+      ...snapshots.map((s): LedgerEntry => ({ type: "balance", ...s })),
+      ...moves,
+    ])
     return dates.map((date) => {
-      while (next < snapshots.length && snapshots[next]!.date <= date) {
-        const s = snapshots[next++]!
-        current.set(s.accountId, s)
-      }
       let total = 0
-      for (const { amount, currency: from } of current.values()) {
-        total += convert(amount, from, currency, rates.get(date)!)
+      for (const [accountId, amount] of balancesAt(date)) {
+        total += convert(amount, currencyOf.get(accountId)!, currency, rates.get(date)!)
       }
       return { date, total: round(total) }
     })
@@ -422,6 +531,7 @@ const updateRoute = createRoute({
     200: jsonContent(AccountSchema, "The updated account"),
     401: { description: "Not signed in" },
     404: notFound,
+    502: ratesUnavailable,
   },
 })
 
@@ -432,7 +542,9 @@ const balanceRoute = createRoute({
   summary: "Record a balance",
   description:
     "Sets the account's balance as of `date` (default today), replacing any balance already " +
-    "recorded that day. Earlier balances are kept for the net-worth history.",
+    "recorded that day. Transactions on the account up to now and dated `date` or earlier are " +
+    "taken as already counted in it; later ones move the balance on from there. Earlier " +
+    "balances are kept for the net-worth history.",
   middleware: [requireAuth] as const,
   request: {
     params: IdParamSchema,
@@ -442,6 +554,7 @@ const balanceRoute = createRoute({
     200: jsonContent(AccountSchema, "The account with its latest balance"),
     401: { description: "Not signed in" },
     404: notFound,
+    502: ratesUnavailable,
   },
 })
 
@@ -450,7 +563,8 @@ const deleteRoute = createRoute({
   path: "/finance/accounts/{id}",
   tags: ["Accounts"],
   summary: "Delete an account",
-  description: "Deletes the account and its balance history.",
+  description:
+    "Deletes the account and its balance history. Its transactions are kept, without an account.",
   middleware: [requireAuth] as const,
   request: { params: IdParamSchema },
   responses: {
@@ -595,6 +709,7 @@ export const accountRoutes = createRouter()
         Effect.catchTag("NotFoundError", () =>
           Effect.succeed(c.json({ error: "Account not found" }, 404)),
         ),
+        Effect.catchTag("RatesError", () => Effect.succeed(c.json(RATES_UNAVAILABLE, 502))),
       ),
     )
   })
@@ -604,7 +719,15 @@ export const accountRoutes = createRouter()
     const { amount, date = today() } = c.req.valid("json")
 
     const program = Effect.gen(function* () {
-      yield* findAccount(user.id, id)
+      const [account] = yield* Db.use((db) =>
+        db.query((db) =>
+          db
+            .select({ id: schema.financeAccount.id })
+            .from(schema.financeAccount)
+            .where(owned(user.id, id)),
+        ),
+      )
+      if (!account) return yield* Effect.fail(new NotFoundError({ entity: "account" }))
       yield* Db.use((db) =>
         db.query((db) =>
           db
@@ -612,7 +735,8 @@ export const accountRoutes = createRouter()
             .values({ accountId: id, date, amount })
             .onConflictDoUpdate({
               target: [schema.balanceSnapshot.accountId, schema.balanceSnapshot.date],
-              set: { amount },
+              // `updatedAt` decides which of that day's transactions this balance already counts.
+              set: { amount, updatedAt: new Date() },
             }),
         ),
       )
@@ -625,6 +749,7 @@ export const accountRoutes = createRouter()
         Effect.catchTag("NotFoundError", () =>
           Effect.succeed(c.json({ error: "Account not found" }, 404)),
         ),
+        Effect.catchTag("RatesError", () => Effect.succeed(c.json(RATES_UNAVAILABLE, 502))),
       ),
     )
   })

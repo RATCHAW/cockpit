@@ -1,7 +1,7 @@
 import { schema } from "@cockpit/db"
 import { z } from "@hono/zod-openapi"
 import { and, eq, isNotNull, lte } from "drizzle-orm"
-import { Effect } from "effect"
+import { Data, Effect } from "effect"
 
 import {
   ACCOUNT_TYPES,
@@ -37,10 +37,44 @@ export const CategorySchema = z
 /** `?currency=` override for any read endpoint; falls back to the user's display currency. */
 export const DisplayCurrencyQuery = z.object({ currency: CurrencySchema.optional() })
 
+/** The account money came out of or went into. Null when there's none to pick. */
+export const AccountIdSchema = z.uuid().nullable().openapi({ example: null })
+
 export const ratesUnavailable = errorResponse("Exchange rates are temporarily unavailable")
 export const RATES_UNAVAILABLE = {
   error: "Exchange rates are temporarily unavailable. Try again shortly.",
 }
+
+// ── Accounts ──────────────────────────────────────────────────────────────────
+
+export class UnknownAccountError extends Data.TaggedError("UnknownAccountError")<{
+  accountId: string
+}> {}
+
+export const unknownAccount = errorResponse("No account with that id")
+export const UNKNOWN_ACCOUNT = { error: "That account doesn't exist. It may have been deleted." }
+
+/** Fails unless `accountId` is unset or one of the user's accounts. */
+export const checkAccount = (userId: string, accountId: string | null | undefined) =>
+  accountId
+    ? Db.use((db) =>
+        db.query((db) =>
+          db
+            .select({ id: schema.financeAccount.id })
+            .from(schema.financeAccount)
+            .where(
+              and(
+                eq(schema.financeAccount.id, accountId),
+                eq(schema.financeAccount.userId, userId),
+              ),
+            ),
+        ),
+      ).pipe(
+        Effect.flatMap(([row]) =>
+          row ? Effect.void : Effect.fail(new UnknownAccountError({ accountId })),
+        ),
+      )
+    : Effect.void
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +174,7 @@ export const bookDueOccurrences = (userId: string) =>
                     description: rule.description,
                     category: rule.category,
                     date,
+                    accountId: rule.accountId,
                     recurringId: rule.id,
                   })),
                 )

@@ -111,7 +111,7 @@ export function formatMoney(
   return format.format(amount)
 }
 
-const isCurrency = (code: string): code is Currency =>
+export const isCurrency = (code: string): code is Currency =>
   (CURRENCIES as readonly string[]).includes(code)
 
 const STABLECOINS = new Set(["USDT", "USDC"])

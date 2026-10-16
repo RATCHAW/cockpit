@@ -26,4 +26,5 @@ import { projectsSeeder } from "./projects"
  * }
  * ```
  */
-export const seeders: Seeder[] = [financesSeeder, accountsSeeder, projectsSeeder]
+// Accounts come first so the finance demo can say which account each transaction used.
+export const seeders: Seeder[] = [accountsSeeder, financesSeeder, projectsSeeder]

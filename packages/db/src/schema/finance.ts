@@ -71,6 +71,8 @@ export const recurringTransaction = pgTable(
     currency: text().notNull(),
     description: text().notNull(),
     category: text().notNull(),
+    /** Account each booked occurrence is paid from or into. */
+    accountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
     frequency: recurrenceFrequency().notNull(),
     /** Every `interval` × `frequency`, e.g. 3 × monthly = quarterly. */
     interval: integer().notNull().default(1),
@@ -98,11 +100,17 @@ export const transaction = pgTable(
     description: text().notNull(),
     category: text().notNull(),
     date: date({ mode: "string" }).notNull(),
+    /**
+     * Where the money came out of or went into. Null for transactions logged before accounts
+     * existed, or whose account was deleted.
+     */
+    accountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
     recurringId: uuid().references(() => recurringTransaction.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [
     index().on(t.userId, t.date),
+    index().on(t.accountId, t.date),
     // A schedule books each occurrence at most once.
     uniqueIndex().on(t.recurringId, t.date),
   ],
@@ -120,7 +128,8 @@ export const exchangeRate = pgTable("exchange_rate", {
 
 /**
  * Somewhere money is kept: a bank account, a Binance wallet, cash in a drawer. Holds a single
- * currency (or crypto asset); its balance is whatever the latest `balanceSnapshot` says.
+ * currency (or crypto asset); its balance is the latest `balanceSnapshot` plus the transactions
+ * on it since.
  */
 export const financeAccount = pgTable(
   "finance_account",
@@ -141,8 +150,10 @@ export const financeAccount = pgTable(
 )
 
 /**
- * An account's balance as of a day. The latest one is the current balance; older ones draw the
- * net-worth history. Updating twice on the same day overwrites. Negative for debts.
+ * An account's balance as you checked it on a day. Transactions on the account that come after
+ * it (a later day, or the same day but logged after it) move the balance from there; earlier
+ * ones are taken as already counted. Updating twice on the same day overwrites. Negative for
+ * debts.
  */
 export const balanceSnapshot = pgTable(
   "balance_snapshot",
@@ -158,8 +169,12 @@ export const balanceSnapshot = pgTable(
   (t) => [primaryKey({ columns: [t.accountId, t.date] })],
 )
 
-export const recurringTransactionRelations = relations(recurringTransaction, ({ many }) => ({
+export const recurringTransactionRelations = relations(recurringTransaction, ({ one, many }) => ({
   transactions: many(transaction),
+  account: one(financeAccount, {
+    fields: [recurringTransaction.accountId],
+    references: [financeAccount.id],
+  }),
 }))
 
 export const transactionRelations = relations(transaction, ({ one }) => ({
@@ -167,10 +182,15 @@ export const transactionRelations = relations(transaction, ({ one }) => ({
     fields: [transaction.recurringId],
     references: [recurringTransaction.id],
   }),
+  account: one(financeAccount, {
+    fields: [transaction.accountId],
+    references: [financeAccount.id],
+  }),
 }))
 
 export const financeAccountRelations = relations(financeAccount, ({ many }) => ({
   balances: many(balanceSnapshot),
+  transactions: many(transaction),
 }))
 
 export const balanceSnapshotRelations = relations(balanceSnapshot, ({ one }) => ({

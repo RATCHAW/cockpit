@@ -6,18 +6,20 @@ import { cn } from "@cockpit/ui/lib/utils"
 import { ArrowDownLeftIcon, ArrowUpRightIcon, RepeatIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { formatDay, formatMoney, type Transaction } from "~/lib/finance"
+import { formatDay, formatMoney, type Account, type Transaction } from "~/lib/finance"
 
 const PAGE = 30
 type Filter = "all" | Transaction["kind"]
 
 export function TransactionList({
   items,
+  accounts,
   currency,
   onSelect,
   onAdd,
 }: {
   items: Transaction[] | undefined
+  accounts: Account[] | undefined
   currency: string
   onSelect: (transaction: Transaction) => void
   onAdd: () => void
@@ -30,6 +32,10 @@ export function TransactionList({
     [items, filter],
   )
   const days = useMemo(() => groupByDay(filtered.slice(0, limit)), [filtered, limit])
+  const accountNames = useMemo(
+    () => new Map((accounts ?? []).map((a) => [a.id, a.name])),
+    [accounts],
+  )
 
   return (
     <section
@@ -78,7 +84,12 @@ export function TransactionList({
               <ul className="-mx-3 grid">
                 {transactions.map((t) => (
                   <li key={t.id}>
-                    <TransactionRow transaction={t} currency={currency} onSelect={onSelect} />
+                    <TransactionRow
+                      transaction={t}
+                      accountName={t.accountId ? accountNames.get(t.accountId) : undefined}
+                      currency={currency}
+                      onSelect={onSelect}
+                    />
                   </li>
                 ))}
               </ul>
@@ -102,10 +113,12 @@ export function TransactionList({
 
 function TransactionRow({
   transaction: t,
+  accountName,
   currency,
   onSelect,
 }: {
   transaction: Transaction
+  accountName: string | undefined
   currency: string
   onSelect: (transaction: Transaction) => void
 }) {
@@ -138,7 +151,10 @@ function TransactionRow({
             </Tooltip>
           ) : null}
         </span>
-        <span className="truncate text-body-sm text-body">{t.category}</span>
+        <span className="truncate text-body-sm text-body">
+          {t.category}
+          {accountName ? ` · ${accountName}` : null}
+        </span>
       </span>
       <span className="grid shrink-0 justify-items-end">
         <span

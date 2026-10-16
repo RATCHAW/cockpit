@@ -5,9 +5,11 @@ import { Effect } from "effect"
 
 import { nextOccurrence, perMonth, today } from "../lib/dates"
 import {
+  AccountIdSchema,
   AmountSchema,
   bookDueOccurrences,
   CategorySchema,
+  checkAccount,
   convert,
   CurrencySchema,
   DescriptionSchema,
@@ -18,6 +20,8 @@ import {
   ratesUnavailable,
   resolveDisplayCurrency,
   round,
+  UNKNOWN_ACCOUNT,
+  unknownAccount,
 } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
@@ -37,6 +41,8 @@ const ScheduleFields = {
   currency: CurrencySchema,
   description: DescriptionSchema,
   category: CategorySchema,
+  /** Account each occurrence is booked against. */
+  accountId: AccountIdSchema.optional(),
   frequency: FrequencySchema,
   /** Every `interval` × `frequency`, e.g. 3 × monthly = quarterly. */
   interval: z.number().int().min(1).max(365).default(1),
@@ -63,6 +69,7 @@ const RecurringUpdateSchema = z
     currency: CurrencySchema,
     description: DescriptionSchema,
     category: CategorySchema,
+    accountId: AccountIdSchema,
     endDate: IsoDateSchema.nullable(),
     /** Pausing skips occurrences; resuming picks up from the next one after today. */
     active: z.boolean(),
@@ -74,6 +81,7 @@ const RecurringSchema = z
   .object({
     ...ScheduleFields,
     id: z.uuid(),
+    accountId: AccountIdSchema,
     interval: z.number().int(),
     endDate: IsoDateSchema.nullable(),
     /** Next occurrence that will be booked. Null once the schedule has ended. */
@@ -107,6 +115,7 @@ const toDto = (row: Row) => ({
   currency: row.currency as Currency,
   description: row.description,
   category: row.category,
+  accountId: row.accountId,
   frequency: row.frequency,
   interval: row.interval,
   startDate: row.startDate,
@@ -147,6 +156,7 @@ const createScheduleRoute = createRoute({
   responses: {
     201: jsonContent(RecurringSchema, "The created schedule"),
     401: { description: "Not signed in" },
+    422: unknownAccount,
   },
 })
 
@@ -166,6 +176,7 @@ const updateRoute = createRoute({
     200: jsonContent(RecurringSchema, "The updated schedule"),
     401: { description: "Not signed in" },
     404: notFound,
+    422: unknownAccount,
   },
 })
 
@@ -232,12 +243,13 @@ export const recurringRoutes = createRouter()
       ),
     )
   })
-  .openapi(createScheduleRoute, async (c) => {
+  .openapi(createScheduleRoute, (c) => {
     const user = c.get("user")
     const input = c.req.valid("json")
     const endDate = input.endDate ?? null
 
     const program = Effect.gen(function* () {
+      yield* checkAccount(user.id, input.accountId)
       const [row] = yield* Db.use((db) =>
         db.query((db) =>
           db
@@ -255,7 +267,12 @@ export const recurringRoutes = createRouter()
       return fresh!
     })
 
-    return c.json(toDto(await runtime.runPromise(program)), 201)
+    return runtime.runPromise(
+      program.pipe(
+        Effect.map((row) => c.json(toDto(row), 201)),
+        Effect.catchTag("UnknownAccountError", () => Effect.succeed(c.json(UNKNOWN_ACCOUNT, 422))),
+      ),
+    )
   })
   .openapi(updateRoute, (c) => {
     const user = c.get("user")
@@ -263,6 +280,7 @@ export const recurringRoutes = createRouter()
     const input = c.req.valid("json")
 
     const program = Effect.gen(function* () {
+      yield* checkAccount(user.id, input.accountId)
       const db = yield* Db
       const [current] = yield* db.query((db) =>
         db.select().from(schema.recurringTransaction).where(owned(user.id, id)),
@@ -296,6 +314,7 @@ export const recurringRoutes = createRouter()
         Effect.catchTag("NotFoundError", () =>
           Effect.succeed(c.json({ error: "Schedule not found" }, 404)),
         ),
+        Effect.catchTag("UnknownAccountError", () => Effect.succeed(c.json(UNKNOWN_ACCOUNT, 422))),
       ),
     )
   })

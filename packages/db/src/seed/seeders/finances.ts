@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm"
 import { seed } from "drizzle-seed"
 
-import { recurringTransaction, transaction, userSettings } from "../../schema"
+import { financeAccount, recurringTransaction, transaction, userSettings } from "../../schema"
 import type { Seeder } from "../types"
 
 const iso = (date: Date) => date.toISOString().slice(0, 10)
@@ -11,9 +11,10 @@ const monthsAgo = (months: number, day: number) => {
 }
 
 /**
- * A year of mixed-currency demo data: salary paid in USD, life in MAD, a few EUR trips and
- * subscriptions. Schedules start a year back with `nextDate` at their start, so the API books
- * every past occurrence on the first request — the same path real schedules take.
+ * A year of mixed-currency demo data: salary paid in USD into RemotePass, life in MAD from the
+ * bank, a few EUR trips and subscriptions. Schedules start a year back with `nextDate` at their
+ * start, so the API books every past occurrence on the first request — the same path real
+ * schedules take.
  */
 export const financesSeeder: Seeder = {
   name: "finances",
@@ -27,6 +28,14 @@ export const financesSeeder: Seeder = {
       console.log("    already has transactions, skipping")
       return
     }
+
+    const accounts = await db
+      .select({ id: financeAccount.id, name: financeAccount.name })
+      .from(financeAccount)
+      .where(eq(financeAccount.userId, admin.id))
+    const accountId = (name: string) => accounts.find((a) => a.name === name)?.id ?? null
+    const bank = accountId("CIH Bank")
+    const wallet = accountId("RemotePass")
 
     await db
       .insert(userSettings)
@@ -51,6 +60,7 @@ export const financesSeeder: Seeder = {
         amount: 4200,
         currency: "USD",
         description: "Salary",
+        accountId: wallet,
         category: "Salary",
         day: 28,
       }),
@@ -59,6 +69,7 @@ export const financesSeeder: Seeder = {
         amount: 6500,
         currency: "MAD",
         description: "Rent",
+        accountId: bank,
         category: "Housing",
         day: 1,
       }),
@@ -67,6 +78,7 @@ export const financesSeeder: Seeder = {
         amount: 15.49,
         currency: "USD",
         description: "Netflix",
+        accountId: bank,
         category: "Subscriptions",
         day: 12,
       }),
@@ -75,6 +87,7 @@ export const financesSeeder: Seeder = {
         amount: 10.99,
         currency: "EUR",
         description: "Spotify",
+        accountId: bank,
         category: "Subscriptions",
         day: 5,
       }),
@@ -83,6 +96,7 @@ export const financesSeeder: Seeder = {
         amount: 20,
         currency: "USD",
         description: "Claude Pro",
+        accountId: bank,
         category: "Subscriptions",
         day: 18,
       }),
@@ -91,6 +105,7 @@ export const financesSeeder: Seeder = {
         amount: 350,
         currency: "MAD",
         description: "Gym",
+        accountId: bank,
         category: "Health",
         day: 3,
       }),
@@ -99,6 +114,7 @@ export const financesSeeder: Seeder = {
         amount: 450,
         currency: "MAD",
         description: "Internet & phone",
+        accountId: bank,
         category: "Utilities",
         day: 8,
       }),
@@ -107,6 +123,7 @@ export const financesSeeder: Seeder = {
         amount: 99,
         currency: "USD",
         description: "Domain & hosting",
+        accountId: bank,
         category: "Subscriptions",
         day: 20,
         frequency: "yearly",
@@ -141,6 +158,7 @@ export const financesSeeder: Seeder = {
           description: f.valuesFromArray({ values: expenses.map((e) => e.description) }),
           category: f.default({ defaultValue: "Other" }),
           date: f.date({ minDate: start, maxDate: iso(new Date()) }),
+          accountId: f.default({ defaultValue: bank }),
           recurringId: f.default({ defaultValue: null }),
         },
       },
@@ -167,6 +185,7 @@ export const financesSeeder: Seeder = {
         amount: 1200,
         currency: "EUR",
         description: "Freelance project",
+        accountId: wallet,
         category: "Freelance",
         date: monthsAgo(7, 14),
       },
@@ -176,6 +195,7 @@ export const financesSeeder: Seeder = {
         amount: 800,
         currency: "USD",
         description: "Freelance project",
+        accountId: wallet,
         category: "Freelance",
         date: monthsAgo(3, 9),
       },
@@ -185,6 +205,7 @@ export const financesSeeder: Seeder = {
         amount: 640,
         currency: "EUR",
         description: "Flights to Lisbon",
+        accountId: bank,
         category: "Travel",
         date: monthsAgo(5, 2),
       },
@@ -194,6 +215,7 @@ export const financesSeeder: Seeder = {
         amount: 420,
         currency: "EUR",
         description: "Hotel in Lisbon",
+        accountId: bank,
         category: "Travel",
         date: monthsAgo(5, 10),
       },
@@ -203,6 +225,7 @@ export const financesSeeder: Seeder = {
         amount: 1299,
         currency: "USD",
         description: "New laptop",
+        accountId: bank,
         category: "Shopping",
         date: monthsAgo(2, 21),
       },
