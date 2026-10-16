@@ -91,7 +91,7 @@ export function AccountDialog({
               </DialogTitle>
               {state.mode === "balance" ? (
                 <DialogDescription>
-                  Was {formatAsset(state.account.balance, state.account.currency)} on{" "}
+                  Now {formatAsset(state.account.balance, state.account.currency)}. Last checked{" "}
                   {formatDate(state.account.updatedOn, { month: "short", day: "numeric" })}.
                 </DialogDescription>
               ) : titles[state.mode].description ? (
@@ -279,8 +279,8 @@ function BalanceForm({ account, onDone }: { account: Account; onDone: () => void
       toast.success(`${account.name} updated`, {
         description:
           change === 0
-            ? "No change since last time."
-            : `${formatAsset(change, account.currency, { sign: true })} since last time.`,
+            ? "No change."
+            : `${formatAsset(change, account.currency, { sign: true })} from before.`,
       })
       onDone()
     },

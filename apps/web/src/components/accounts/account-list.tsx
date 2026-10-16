@@ -160,8 +160,9 @@ export function AccountList({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{confirmDelete?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              Its balance history goes with it, so your net worth over time will change. If you
-              closed the account, set its balance to 0 instead to keep the history.
+              Its balance history goes with it, so your net worth over time will change. Its
+              transactions stay, without an account. If you closed the account, set its balance to 0
+              instead to keep the history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -221,10 +222,10 @@ function AccountRow({
             {ACCOUNT_TYPE_LABELS[a.type]}
             {" · "}
             {stale
-              ? `Not updated in ${daysBetween(a.updatedOn, today)} days`
+              ? `Not checked in ${daysBetween(a.updatedOn, today)} days`
               : a.updatedOn === today
-                ? "Updated today"
-                : `Updated ${relativeDays(a.updatedOn, today)}`}
+                ? "Checked today"
+                : `Checked ${relativeDays(a.updatedOn, today)}`}
           </span>
         </span>
         <span className="grid shrink-0 justify-items-end pr-1">

@@ -26,7 +26,14 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { api } from "~/lib/api"
-import { describeSchedule, financeKey, formatDate, formatMoney, type Schedule } from "~/lib/finance"
+import {
+  describeSchedule,
+  financeKey,
+  formatDate,
+  formatMoney,
+  type Account,
+  type Schedule,
+} from "~/lib/finance"
 
 type RecurringList = {
   currency: string
@@ -36,10 +43,12 @@ type RecurringList = {
 
 export function ScheduleList({
   data,
+  accounts,
   onEdit,
   onAdd,
 }: {
   data: RecurringList | undefined
+  accounts: Account[] | undefined
   onEdit: (schedule: Schedule) => void
   onAdd: () => void
 }) {
@@ -132,6 +141,9 @@ export function ScheduleList({
                     {describeSchedule(s)}
                     {s.active && s.nextDate
                       ? ` · ${formatDate(s.nextDate, { month: "short", day: "numeric" })}`
+                      : null}
+                    {s.accountId && accounts
+                      ? ` · ${accounts.find((a) => a.id === s.accountId)?.name ?? ""}`
                       : null}
                   </span>
                 </div>

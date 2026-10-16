@@ -23,11 +23,14 @@ import {
   CURRENCIES,
   currencyOptions,
   financeKey,
+  formatDate,
   formatMoney,
+  isCurrency,
   isoDate,
   parseAmount,
   REPEATS,
   TRANSACTION_KINDS,
+  type Account,
   type Currency,
   type Repeat,
   type Schedule,
@@ -40,7 +43,7 @@ export type TransactionDialogState =
   | { mode: "edit"; transaction: Transaction }
   | { mode: "schedule"; schedule: Schedule }
 
-const formSchema = z
+const baseSchema = z
   .object({
     kind: z.enum(TRANSACTION_KINDS),
     amount: z
@@ -49,6 +52,8 @@ const formSchema = z
       .min(1, "Enter an amount.")
       .refine((v) => parseAmount(v) > 0, "Enter an amount above zero."),
     currency: z.enum(CURRENCIES),
+    /** "" when there's no account to pick. */
+    accountId: z.string(),
     description: z
       .string()
       .trim()
@@ -64,11 +69,22 @@ const formSchema = z
     path: ["endDate"],
   })
 
-type FormValues = z.infer<typeof formSchema>
+/** Once you have accounts, every transaction says which one it went through. */
+const formSchema = (requireAccount: boolean) =>
+  baseSchema.refine((v) => !requireAccount || v.accountId !== "", {
+    message: "Pick the account it went through.",
+    path: ["accountId"],
+  })
+
+type FormValues = z.infer<typeof baseSchema>
 
 const repeatOptions = Object.entries(REPEATS).map(([value, { label }]) => ({ value, label }))
 
-function initialValues(state: TransactionDialogState, defaultCurrency: Currency): FormValues {
+function initialValues(
+  state: TransactionDialogState,
+  defaultCurrency: Currency,
+  defaultAccount: Account | undefined,
+): FormValues {
   const blank = { repeat: "none" as Repeat, endDate: "" }
   switch (state.mode) {
     case "create":
@@ -77,7 +93,11 @@ function initialValues(state: TransactionDialogState, defaultCurrency: Currency)
         repeat: state.repeat ?? "none",
         kind: "expense",
         amount: "",
-        currency: defaultCurrency,
+        currency:
+          defaultAccount && isCurrency(defaultAccount.currency)
+            ? defaultAccount.currency
+            : defaultCurrency,
+        accountId: defaultAccount?.id ?? "",
         description: "",
         category: "",
         date: isoDate(new Date()),
@@ -102,6 +122,7 @@ function pick(t: Transaction | Schedule) {
     kind: t.kind,
     amount: String(t.amount),
     currency: t.currency,
+    accountId: t.accountId ?? "",
     description: t.description,
     category: t.category,
   }
@@ -123,10 +144,15 @@ export function TransactionDialog({
   state,
   onClose,
   defaultCurrency,
+  accounts,
+  lastAccountId,
 }: {
   state: TransactionDialogState | null
   onClose: () => void
   defaultCurrency: Currency
+  accounts: Account[]
+  /** Preselected for new transactions while it still exists. */
+  lastAccountId: string | undefined
 }) {
   return (
     <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
@@ -139,7 +165,13 @@ export function TransactionDialog({
                 <DialogDescription>{titles[state.mode].description}</DialogDescription>
               ) : null}
             </DialogHeader>
-            <TransactionForm state={state} onDone={onClose} defaultCurrency={defaultCurrency} />
+            <TransactionForm
+              state={state}
+              onDone={onClose}
+              defaultCurrency={defaultCurrency}
+              accounts={accounts}
+              lastAccountId={lastAccountId}
+            />
           </>
         ) : null}
       </DialogContent>
@@ -151,10 +183,14 @@ function TransactionForm({
   state,
   onDone,
   defaultCurrency,
+  accounts,
+  lastAccountId,
 }: {
   state: TransactionDialogState
   onDone: () => void
   defaultCurrency: Currency
+  accounts: Account[]
+  lastAccountId: string | undefined
 }) {
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: financeKey })
@@ -167,6 +203,7 @@ function TransactionForm({
         currency: values.currency,
         description: values.description.trim(),
         category: values.category,
+        accountId: values.accountId || null,
       }
       const endDate = values.endDate || null
       if (state.mode === "edit") {
@@ -226,10 +263,10 @@ function TransactionForm({
         action: {
           label: "Undo",
           onClick: async () => {
-            const { kind, amount, currency, description, category, date } = t
+            const { kind, amount, currency, description, category, date, accountId } = t
             await parseResponse(
               api.finance.transactions.$post({
-                json: { kind, amount, currency, description, category, date },
+                json: { kind, amount, currency, description, category, date, accountId },
               }),
             ).catch(() => toast.error("Couldn't restore it. Add it again manually."))
             await refresh()
@@ -240,10 +277,16 @@ function TransactionForm({
     onError: () => toast.error("Couldn't delete it. Try again."),
   })
 
+  const defaultAccount =
+    accounts.find((a) => a.id === lastAccountId) ?? accounts.find((a) => a.spendable) ?? accounts[0]
+  // Day-to-day accounts first; savings rarely pay for things.
+  const accountOptions = accounts
+    .toSorted((a, b) => Number(b.spendable) - Number(a.spendable))
+    .map((a) => ({ value: a.id, label: `${a.name} · ${a.currency}` }))
   const form = useAppForm({
-    defaultValues: initialValues(state, defaultCurrency),
+    defaultValues: initialValues(state, defaultCurrency, defaultAccount),
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: formSchema },
+    validators: { onDynamic: formSchema(accounts.length > 0) },
     onSubmit: async ({ value }) => {
       await save.mutateAsync(value).catch(() => {})
     },
@@ -311,6 +354,30 @@ function TransactionForm({
         </form.AppField>
       </div>
 
+      {accounts.length > 0 ? (
+        <form.Subscribe selector={(s) => s.values.kind}>
+          {(kind) => (
+            <form.AppField
+              name="accountId"
+              listeners={{
+                onChange: ({ value }) => {
+                  const currency = accounts.find((a) => a.id === value)?.currency
+                  if (currency && isCurrency(currency)) form.setFieldValue("currency", currency)
+                },
+              }}
+            >
+              {(field) => (
+                <field.SelectField
+                  label={kind === "income" ? "Paid into" : "Paid from"}
+                  placeholder="Pick an account"
+                  options={accountOptions}
+                />
+              )}
+            </form.AppField>
+          )}
+        </form.Subscribe>
+      ) : null}
+
       <form.AppField name="description">
         {(field) => (
           <field.TextField
@@ -353,6 +420,21 @@ function TransactionForm({
           </form.AppField>
         ) : null}
       </div>
+
+      <form.Subscribe
+        selector={(s) => [s.values.accountId, s.values.date, s.values.repeat] as const}
+      >
+        {([accountId, date, repeat]) => {
+          const account = accounts.find((a) => a.id === accountId)
+          return account && repeat === "none" && date && date < account.updatedOn ? (
+            <p className="text-body-sm text-mute">
+              The {account.name} balance you recorded on{" "}
+              {formatDate(account.updatedOn, { month: "short", day: "numeric" })} already includes
+              this, so it won't change.
+            </p>
+          ) : null
+        }}
+      </form.Subscribe>
 
       <form.Subscribe selector={(s) => s.values.repeat}>
         {(repeat) =>
