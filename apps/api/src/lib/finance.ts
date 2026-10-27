@@ -6,14 +6,15 @@ import { Data, Effect } from "effect"
 import {
   ACCOUNT_TYPES,
   ASSETS,
+  CRYPTO_ASSETS,
   CURRENCIES,
   DEFAULT_CURRENCY,
   FREQUENCIES,
   TRANSACTION_KINDS,
   type Currency,
 } from "../shared/finance"
-import { occurrence, occurrenceIndexFrom, today, type IsoDate } from "./dates"
-import { errorResponse } from "./openapi"
+import { addDays, occurrence, occurrenceIndexFrom, today, type IsoDate } from "./dates"
+import { errorResponse, IsoDateSchema } from "./openapi"
 import { Db, type Rates } from "./services"
 
 // ── Shared schemas ────────────────────────────────────────────────────────────
@@ -33,6 +34,11 @@ export const DisplayCurrencyQuery = z.object({ currency: CurrencySchema.optional
 
 /** The account money came out of or went into. Null when there's none to pick. */
 export const AccountIdSchema = z.uuid().nullable().openapi({ example: null })
+
+/** Balances are as of a day; a little slack lets a client a timezone ahead say "today". */
+export const BalanceDateSchema = IsoDateSchema.refine((date) => date <= addDays(today(), 1), {
+  message: "Balance date can't be in the future",
+})
 
 export const ratesUnavailable = errorResponse("Exchange rates are temporarily unavailable")
 export const RATES_UNAVAILABLE = {
@@ -107,6 +113,10 @@ export const round = (value: number, digits = 2) => {
   const f = 10 ** digits
   return Math.round(value * f) / f
 }
+
+/** Fiat to the cent; crypto keeps the decimals a balance is stored with. */
+export const roundBalance = (amount: number, asset: string) =>
+  round(amount, (CRYPTO_ASSETS as readonly string[]).includes(asset) ? 10 : 2)
 
 /** Converts via USD, which every rate is quoted against. */
 export function convert(amount: number, from: string, to: string, rates: Rates) {
