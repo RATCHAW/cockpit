@@ -43,6 +43,13 @@
       "when": 1793093689699,
       "tag": "0005_brainy_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793109862269,
+      "tag": "0006_rare_smasher",
+      "breakpoints": true
     }
   ]
 }

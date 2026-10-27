@@ -16,6 +16,7 @@ import {
 import {
   AccountTypeSchema,
   AssetSchema,
+  BalanceDateSchema,
   bookDueOccurrences,
   convert,
   CurrencySchema,
@@ -24,6 +25,7 @@ import {
   ratesUnavailable,
   resolveDisplayCurrency,
   round,
+  roundBalance,
 } from "../lib/finance"
 import { createRouter } from "../lib/hono"
 import { requireAuth } from "../lib/middleware"
@@ -35,7 +37,7 @@ import {
   NotFoundError,
 } from "../lib/openapi"
 import { Db, ExchangeRates, runtime } from "../lib/services"
-import { CRYPTO_ASSETS, SAFETY_NET_MONTHS, type Asset } from "../shared/finance"
+import { SAFETY_NET_MONTHS, type Asset } from "../shared/finance"
 
 /** How far ahead scheduled bills and income count towards what's free to spend. */
 const OUTLOOK_DAYS = 30
@@ -51,10 +53,6 @@ const BalanceSchema = z
   .min(-1_000_000_000_000)
   .max(1_000_000_000_000)
   .openapi({ example: 1250.5 })
-/** Balances are as of a day; a little slack lets a client a timezone ahead say "today". */
-const BalanceDateSchema = IsoDateSchema.refine((date) => date <= addDays(today(), 1), {
-  message: "Balance date can't be in the future",
-})
 
 const AccountInputSchema = z
   .object({
@@ -85,7 +83,7 @@ const AccountSchema = z
     type: AccountTypeSchema,
     currency: AssetSchema,
     spendable: z.boolean(),
-    /** The latest recorded balance plus the transactions on the account since. */
+    /** The latest recorded balance plus the transactions and transfers on the account since. */
     balance: z.number(),
     /** Day the balance was last recorded. */
     updatedOn: IsoDateSchema,
@@ -170,18 +168,18 @@ const owned = (userId: string, id: string) =>
 type LedgerEntry = {
   accountId: string
   date: IsoDate
-  /** When it was recorded: orders a balance and a transaction that share a day. */
+  /** When it was recorded: orders a balance and a move that share a day. */
   at: Date
 } & (
   | { type: "balance"; amount: number }
-  /** Signed, in the account's currency. */
-  | { type: "transaction"; amount: number }
+  /** A transaction or one side of a transfer. Signed, in the account's currency. */
+  | { type: "move"; amount: number }
 )
 
 /**
- * Replays recorded balances and transactions in the order they happened. A recorded balance
- * replaces whatever came before it; a transaction moves the balance on from there. Transactions
- * before an account's first balance are taken as already counted in it.
+ * Replays recorded balances and moves in the order they happened. A recorded balance replaces
+ * whatever came before it; a move changes the balance from there. Moves before an account's
+ * first balance are taken as already counted in it.
  *
  * Returns each account's balance at the end of a day. Call it with ascending days.
  */
@@ -239,7 +237,7 @@ const transactionEntries = (userId: string, from: IsoDate, to: IsoDate) =>
           ? row.amount
           : convert(row.amount, row.currency, row.accountCurrency, rates.get(row.date)!)
       return {
-        type: "transaction",
+        type: "move",
         accountId: row.accountId,
         date: row.date,
         at: row.at,
@@ -248,9 +246,40 @@ const transactionEntries = (userId: string, from: IsoDate, to: IsoDate) =>
     })
   })
 
-/** Fiat to the cent; crypto keeps the decimals a balance is stored with. */
-const roundBalance = (amount: number, asset: string) =>
-  round(amount, (CRYPTO_ASSETS as readonly string[]).includes(asset) ? 10 : 2)
+/** Both sides of the user's transfers dated `from`..`to`, minus sides on deleted accounts. */
+const transferEntries = (userId: string, from: IsoDate, to: IsoDate) =>
+  Db.use((db) =>
+    db.query((db) =>
+      db
+        .select()
+        .from(schema.transfer)
+        .where(
+          and(
+            eq(schema.transfer.userId, userId),
+            gte(schema.transfer.date, from),
+            lte(schema.transfer.date, to),
+          ),
+        ),
+    ),
+  ).pipe(
+    Effect.map((rows) =>
+      rows.flatMap((row) => {
+        const sides: LedgerEntry[] = []
+        const when = { date: row.date, at: row.createdAt }
+        if (row.fromAccountId)
+          sides.push({ type: "move", accountId: row.fromAccountId, amount: -row.amount, ...when })
+        if (row.toAccountId)
+          sides.push({ type: "move", accountId: row.toAccountId, amount: row.received, ...when })
+        return sides
+      }),
+    ),
+  )
+
+/** Transactions and transfers on the user's accounts dated `from`..`to`. */
+const moveEntries = (userId: string, from: IsoDate, to: IsoDate) =>
+  Effect.all([transactionEntries(userId, from, to), transferEntries(userId, from, to)], {
+    concurrency: "unbounded",
+  }).pipe(Effect.map((entries) => entries.flat()))
 
 /** Every account with its current balance, oldest account first. */
 const loadAccounts = (userId: string) =>
@@ -286,7 +315,7 @@ const loadAccounts = (userId: string) =>
     // Balances can be recorded a day ahead (see `BalanceDateSchema`), so count up to then too.
     const until = addDays(today(), 1)
     const since = latest.reduce((min, row) => (row.date < min ? row.date : min), until)
-    const moves = yield* transactionEntries(userId, since, until)
+    const moves = yield* moveEntries(userId, since, until)
     const balances = replay([
       ...latest.map((row): LedgerEntry => ({ type: "balance", ...row })),
       ...moves,
@@ -376,10 +405,7 @@ const netWorthHistory = (userId: string, currency: string) =>
     const now = today()
     const dates = historyDates(snapshots[0]!.date, now)
     const [rates, moves] = yield* Effect.all(
-      [
-        ExchangeRates.use((fx) => fx.forDates(dates)),
-        transactionEntries(userId, snapshots[0]!.date, now),
-      ],
+      [ExchangeRates.use((fx) => fx.forDates(dates)), moveEntries(userId, snapshots[0]!.date, now)],
       { concurrency: "unbounded" },
     )
 
@@ -542,9 +568,9 @@ const balanceRoute = createRoute({
   summary: "Record a balance",
   description:
     "Sets the account's balance as of `date` (default today), replacing any balance already " +
-    "recorded that day. Transactions on the account up to now and dated `date` or earlier are " +
-    "taken as already counted in it; later ones move the balance on from there. Earlier " +
-    "balances are kept for the net-worth history.",
+    "recorded that day. Transactions and transfers on the account up to now and dated `date` " +
+    "or earlier are taken as already counted in it; later ones move the balance on from there. " +
+    "Earlier balances are kept for the net-worth history.",
   middleware: [requireAuth] as const,
   request: {
     params: IdParamSchema,

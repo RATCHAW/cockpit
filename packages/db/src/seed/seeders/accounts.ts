@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm"
 
-import { balanceSnapshot, financeAccount } from "../../schema"
+import { balanceSnapshot, financeAccount, transfer } from "../../schema"
 import type { Seeder } from "../types"
 
 const iso = (date: Date) => date.toISOString().slice(0, 10)
@@ -42,6 +42,13 @@ const demo: DemoAccount[] = [
   },
 ]
 
+/** Money moved between the demo accounts, by name. */
+const transfers = [
+  // Cash was last checked before this, so it goes up; the bank's later balance already counts it.
+  { from: "CIH Bank", to: "Cash", amount: 1_000, received: 1_000, days: 10 },
+  { from: "RemotePass", to: "Binance", amount: 500, received: 497.5, days: 20 },
+]
+
 /** Where the money sits: a bank, cash, RemotePass, Binance and some savings set aside. */
 export const accountsSeeder: Seeder = {
   name: "accounts",
@@ -56,11 +63,13 @@ export const accountsSeeder: Seeder = {
       return
     }
 
+    const ids = new Map<string, string>()
     for (const { balance, monthly, updated, ...account } of demo) {
       const [row] = await db
         .insert(financeAccount)
         .values({ ...account, userId: admin.id })
         .returning({ id: financeAccount.id })
+      ids.set(account.name, row!.id)
       await db.insert(balanceSnapshot).values(
         Array.from({ length: MONTHS + 1 }, (_, i) => ({
           accountId: row!.id,
@@ -70,6 +79,18 @@ export const accountsSeeder: Seeder = {
       )
     }
 
-    console.log(`    ${demo.length} accounts with ${MONTHS + 1} months of balances`)
+    await db.insert(transfer).values(
+      transfers.map(({ from, to, days, ...amounts }) => ({
+        userId: admin.id,
+        fromAccountId: ids.get(from)!,
+        toAccountId: ids.get(to)!,
+        date: daysAgo(days),
+        ...amounts,
+      })),
+    )
+
+    console.log(
+      `    ${demo.length} accounts with ${MONTHS + 1} months of balances, ${transfers.length} transfers`,
+    )
   },
 }

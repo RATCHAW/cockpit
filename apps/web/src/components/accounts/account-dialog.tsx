@@ -7,9 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@cockpit/ui/components/dialog"
+import { Tabs, TabsList, TabsTrigger } from "@cockpit/ui/components/tabs"
 import { revalidateLogic } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { parseResponse } from "hono/client"
+import { ArrowLeftRightIcon, ArrowUpDownIcon } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -62,6 +65,27 @@ const accountSchema = z.object({
 
 const balanceSchema = z.object({ amount: amountField, date: dateField })
 
+const moveAmountField = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || parseAmount(v) > 0, "Enter an amount above 0, e.g. 500.")
+
+const moveSchema = z
+  .object({
+    fromAccountId: z.string(),
+    toAccountId: z.string(),
+    amount: moveAmountField.refine((v) => v !== "", "Enter the amount."),
+    /** Only asked for across currencies; "" uses the exchange rate. */
+    received: moveAmountField,
+    date: z.iso
+      .date("Pick a date.")
+      .refine((d) => d <= isoDate(new Date()), "Transfers can't be in the future."),
+  })
+  .refine((v) => v.fromAccountId !== v.toAccountId, {
+    message: "Pick a different account.",
+    path: ["toAccountId"],
+  })
+
 const titles = {
   create: {
     title: "Add an account",
@@ -75,10 +99,13 @@ export function AccountDialog({
   state,
   onClose,
   defaultCurrency,
+  accounts,
 }: {
   state: AccountDialogState | null
   onClose: () => void
   defaultCurrency: Asset
+  /** Where money can be moved to or from. */
+  accounts: Account[]
 }) {
   return (
     <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
@@ -99,7 +126,7 @@ export function AccountDialog({
               ) : null}
             </DialogHeader>
             {state.mode === "balance" ? (
-              <BalanceForm account={state.account} onDone={onClose} />
+              <BalancePanel account={state.account} accounts={accounts} onDone={onClose} />
             ) : (
               <AccountForm state={state} onDone={onClose} defaultCurrency={defaultCurrency} />
             )}
@@ -262,6 +289,37 @@ function AccountForm({
   )
 }
 
+/** Either the balance was checked, or money went to or came from another account. */
+function BalancePanel({
+  account,
+  accounts,
+  onDone,
+}: {
+  account: Account
+  accounts: Account[]
+  onDone: () => void
+}) {
+  const [tab, setTab] = useState<"set" | "move">("set")
+  if (!accounts.some((a) => a.id !== account.id)) {
+    return <BalanceForm account={account} onDone={onDone} />
+  }
+  return (
+    <div className="grid gap-5">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+        <TabsList className="w-full" aria-label="What changed">
+          <TabsTrigger value="set">Set balance</TabsTrigger>
+          <TabsTrigger value="move">Move money</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {tab === "set" ? (
+        <BalanceForm account={account} onDone={onDone} />
+      ) : (
+        <MoveForm account={account} accounts={accounts} onDone={onDone} />
+      )}
+    </div>
+  )
+}
+
 function BalanceForm({ account, onDone }: { account: Account; onDone: () => void }) {
   const queryClient = useQueryClient()
 
@@ -337,6 +395,213 @@ function BalanceForm({ account, onDone }: { account: Account; onDone: () => void
         <form.AppForm>
           <form.SubmitButton pendingLabel="Saving…" pending={save.isPending} className="sm:w-auto">
             Save balance
+          </form.SubmitButton>
+        </form.AppForm>
+      </DialogFooter>
+    </form>
+  )
+}
+
+function MoveForm({
+  account,
+  accounts,
+  onDone,
+}: {
+  account: Account
+  accounts: Account[]
+  onDone: () => void
+}) {
+  const queryClient = useQueryClient()
+  const refresh = () => queryClient.invalidateQueries({ queryKey: financeKey })
+  const byId = (id: string) => accounts.find((a) => a.id === id)
+  // Day-to-day accounts first: money mostly moves between the bank, cash and wallets.
+  const options = accounts
+    .toSorted((a, b) => Number(b.spendable) - Number(a.spendable))
+    .map((a) => ({ value: a.id, label: `${a.name} · ${a.currency}` }))
+
+  const save = useMutation({
+    mutationFn: async (values: z.infer<typeof moveSchema>) => {
+      const from = byId(values.fromAccountId)!
+      const to = byId(values.toAccountId)!
+      const transfer = await parseResponse(
+        api.finance.transfers.$post({
+          json: {
+            fromAccountId: from.id,
+            toAccountId: to.id,
+            amount: parseAmount(values.amount),
+            received: values.received ? parseAmount(values.received) : undefined,
+            date: values.date,
+          },
+        }),
+      )
+      return { transfer, from, to }
+    },
+    onSuccess: async ({ transfer, from, to }) => {
+      await refresh()
+      toast.success(`Moved ${formatAsset(transfer.amount, from.currency)} to ${to.name}`, {
+        description:
+          from.currency === to.currency
+            ? `From ${from.name}.`
+            : `From ${from.name}. ${to.name} got ${formatAsset(transfer.received, to.currency)}.`,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            await parseResponse(
+              api.finance.transfers[":id"].$delete({ param: { id: transfer.id } }),
+            ).catch(() => toast.error("Couldn't undo it. Update both balances instead."))
+            await refresh()
+          },
+        },
+      })
+      onDone()
+    },
+  })
+
+  // Same currency first (nothing to convert), then day-to-day money.
+  const likeliness = (a: Account) =>
+    2 * Number(a.currency === account.currency) + Number(a.spendable)
+  const counterpart = accounts
+    .filter((a) => a.id !== account.id)
+    .toSorted((a, b) => likeliness(b) - likeliness(a))[0]!
+
+  const form = useAppForm({
+    defaultValues: {
+      fromAccountId: account.id,
+      toAccountId: counterpart.id,
+      amount: "",
+      received: "",
+      date: isoDate(new Date()),
+    } as z.infer<typeof moveSchema>,
+    validationLogic: revalidateLogic(),
+    validators: { onDynamic: moveSchema },
+    onSubmit: async ({ value }) => {
+      await save.mutateAsync(value).catch(() => {})
+    },
+  })
+
+  // A received amount only means something for the pair of accounts it was typed for.
+  const clearReceived = { onChange: () => form.setFieldValue("received", "") }
+
+  return (
+    <form
+      noValidate
+      className="grid gap-5"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void form.handleSubmit()
+      }}
+    >
+      {save.error ? (
+        <FormAlert>Couldn't move that. Check your connection and try again.</FormAlert>
+      ) : null}
+
+      {/* Two selects side by side don't fit a phone, so they stack there with the swap beside both. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-5 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-start">
+        <div className="col-start-1 row-start-1">
+          <form.AppField name="fromAccountId" listeners={clearReceived}>
+            {(field) => <field.SelectField label="From" options={options} />}
+          </form.AppField>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="col-start-2 row-span-2 row-start-1 sm:row-span-1 sm:mt-5.5"
+          aria-label="Swap accounts"
+          onClick={() => {
+            const { fromAccountId, toAccountId } = form.state.values
+            form.setFieldValue("fromAccountId", toAccountId)
+            form.setFieldValue("toAccountId", fromAccountId)
+            form.setFieldValue("received", "")
+          }}
+        >
+          <ArrowUpDownIcon className="sm:hidden" />
+          <ArrowLeftRightIcon className="hidden sm:block" />
+        </Button>
+        <div className="col-start-1 row-start-2 sm:col-start-3 sm:row-start-1">
+          <form.AppField name="toAccountId" listeners={clearReceived}>
+            {(field) => <field.SelectField label="To" options={options} />}
+          </form.AppField>
+        </div>
+      </div>
+
+      <form.Subscribe
+        selector={(s) => [byId(s.values.fromAccountId), byId(s.values.toAccountId)] as const}
+      >
+        {([from, to]) => (
+          <>
+            <div className="grid gap-5 sm:grid-cols-[1fr_11rem] sm:gap-3">
+              <form.AppField name="amount">
+                {(field) => (
+                  <field.TextField
+                    label={from ? `Amount in ${from.currency}` : "Amount"}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="0.00"
+                    className="tabular-nums"
+                    autoFocus
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="date">
+                {(field) => <field.TextField label="On" type="date" max={isoDate(new Date())} />}
+              </form.AppField>
+            </div>
+            {from && to && from.currency !== to.currency ? (
+              <form.AppField name="received">
+                {(field) => (
+                  <field.TextField
+                    label={`${to.name} got, in ${to.currency}`}
+                    hint={<span className="text-body-sm text-mute">Optional</span>}
+                    inputMode="decimal"
+                    autoComplete="off"
+                    placeholder="At the exchange rate"
+                    className="tabular-nums"
+                  />
+                )}
+              </form.AppField>
+            ) : null}
+          </>
+        )}
+      </form.Subscribe>
+
+      <form.Subscribe
+        selector={(s) =>
+          [byId(s.values.fromAccountId), byId(s.values.toAccountId), s.values.date] as const
+        }
+      >
+        {([from, to, date]) => {
+          const counted = [from, to].filter(
+            (a): a is Account => !!a && !!date && date < a.updatedOn,
+          )
+          if (counted.length === 0) return null
+          const first = counted[0]!
+          return (
+            <p className="text-body-sm text-mute">
+              {counted.length === 2 ? (
+                <>
+                  The balances you recorded for both accounts since then already include this, so
+                  they won't change.
+                </>
+              ) : (
+                <>
+                  The {first.name} balance you recorded on{" "}
+                  {formatDate(first.updatedOn, { month: "short", day: "numeric" })} already includes
+                  this, so it won't change.
+                </>
+              )}
+            </p>
+          )
+        }}
+      </form.Subscribe>
+
+      <DialogFooter className="pt-1">
+        <Button type="button" variant="ghost" onClick={onDone} className="hidden sm:inline-flex">
+          Cancel
+        </Button>
+        <form.AppForm>
+          <form.SubmitButton pendingLabel="Moving…" pending={save.isPending} className="sm:w-auto">
+            Move money
           </form.SubmitButton>
         </form.AppForm>
       </DialogFooter>

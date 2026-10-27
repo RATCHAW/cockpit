@@ -153,7 +153,7 @@ export const exchangeRate = pgTable("exchange_rate", {
 /**
  * Somewhere money is kept: a bank account, a Binance wallet, cash in a drawer. Holds a single
  * currency (or crypto asset); its balance is the latest `balanceSnapshot` plus the transactions
- * on it since.
+ * and transfers on it since.
  */
 export const financeAccount = pgTable(
   "finance_account",
@@ -191,6 +191,31 @@ export const balanceSnapshot = pgTable(
     ...timestamps,
   },
   (t) => [primaryKey({ columns: [t.accountId, t.date] })],
+)
+
+/**
+ * Money moved between two of your accounts: cash taken out of the bank, dirhams turned into
+ * USDT. It's neither income nor spending, so it only moves balances. On each side it counts like
+ * a transaction: a balance recorded after it already includes it.
+ */
+export const transfer = pgTable(
+  "transfer",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Null once the account is deleted; the other side still counts. */
+    fromAccountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
+    toAccountId: uuid().references(() => financeAccount.id, { onDelete: "set null" }),
+    /** What left `fromAccountId`, in its currency. Always positive. */
+    amount: numeric({ precision: 30, scale: 10, mode: "number" }).notNull(),
+    /** What reached `toAccountId`, in its currency. Differs across currencies or after fees. */
+    received: numeric({ precision: 30, scale: 10, mode: "number" }).notNull(),
+    date: date({ mode: "string" }).notNull(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.userId, t.date)],
 )
 
 export const recurringTransactionRelations = relations(recurringTransaction, ({ one, many }) => ({
