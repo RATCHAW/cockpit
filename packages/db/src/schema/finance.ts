@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm"
+import { relations, sql } from "drizzle-orm"
 import {
   boolean,
   date,
@@ -113,6 +113,30 @@ export const transaction = pgTable(
     index().on(t.accountId, t.date),
     // A schedule books each occurrence at most once.
     uniqueIndex().on(t.recurringId, t.date),
+  ],
+)
+
+/**
+ * Transactions and schedules store the name itself, not a reference: renaming a category rewrites
+ * them, removing one leaves them as they are.
+ */
+export const financeCategory = pgTable(
+  "finance_category",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: transactionKind().notNull(),
+    name: text().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("finance_category_user_id_kind_name_index").on(
+      t.userId,
+      t.kind,
+      sql`lower(${t.name})`,
+    ),
   ],
 )
 

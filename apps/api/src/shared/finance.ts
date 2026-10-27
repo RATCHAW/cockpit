@@ -83,22 +83,3 @@ export type TransactionKind = (typeof TRANSACTION_KINDS)[number]
 
 export const FREQUENCIES = ["daily", "weekly", "monthly", "yearly"] as const
 export type Frequency = (typeof FREQUENCIES)[number]
-
-export const CATEGORIES = {
-  expense: [
-    "Housing",
-    "Groceries",
-    "Dining",
-    "Transport",
-    "Utilities",
-    "Subscriptions",
-    "Shopping",
-    "Health",
-    "Entertainment",
-    "Travel",
-    "Education",
-    "Gifts",
-    "Other",
-  ],
-  income: ["Salary", "Freelance", "Investments", "Refunds", "Gifts", "Other"],
-} as const satisfies Record<TransactionKind, readonly string[]>

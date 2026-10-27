@@ -12,13 +12,7 @@ import { parseResponse, type InferResponseType } from "hono/client"
 
 import { api } from "./api"
 
-export {
-  ACCOUNT_TYPES,
-  ASSETS,
-  CATEGORIES,
-  CURRENCIES,
-  TRANSACTION_KINDS,
-} from "@cockpit/api/finance"
+export { ACCOUNT_TYPES, ASSETS, CURRENCIES, TRANSACTION_KINDS } from "@cockpit/api/finance"
 export type { AccountType, Asset, Currency, Frequency, TransactionKind }
 
 export type Summary = InferResponseType<typeof api.finance.summary.$get, 200>
@@ -31,6 +25,7 @@ export type Settings = InferResponseType<typeof api.settings.$get, 200>
 export type AccountList = InferResponseType<typeof api.finance.accounts.$get, 200>
 export type Account = AccountList["items"][number]
 export type NetWorth = InferResponseType<(typeof api.finance)["net-worth"]["$get"], 200>
+export type Category = InferResponseType<typeof api.finance.categories.$get, 200>["items"][number]
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +68,11 @@ export const netWorthQueryOptions = (currency?: Currency) =>
     queryFn: () => parseResponse(api.finance["net-worth"].$get({ query: { currency } })),
     placeholderData: keepPreviousData,
   })
+
+export const categoriesQueryOptions = queryOptions({
+  queryKey: [...financeKey, "categories"],
+  queryFn: () => parseResponse(api.finance.categories.$get()),
+})
 
 export const settingsQueryOptions = queryOptions({
   queryKey: ["settings"],

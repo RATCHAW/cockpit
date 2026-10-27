@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./categories": "./src/categories.ts",
     "./owner": "./src/owner.ts",
     "./schema": "./src/schema/index.ts"
   },
