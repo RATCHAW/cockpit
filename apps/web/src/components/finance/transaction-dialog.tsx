@@ -9,7 +9,7 @@ import {
 } from "@cockpit/ui/components/dialog"
 import { Tabs, TabsList, TabsTrigger } from "@cockpit/ui/components/tabs"
 import { revalidateLogic } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { parseResponse } from "hono/client"
 import { Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
@@ -19,7 +19,7 @@ import { FormAlert } from "~/components/form-alert"
 import { useAppForm } from "~/hooks/form"
 import { api } from "~/lib/api"
 import {
-  CATEGORIES,
+  categoriesQueryOptions,
   CURRENCIES,
   currencyOptions,
   financeKey,
@@ -79,6 +79,9 @@ const formSchema = (requireAccount: boolean) =>
 type FormValues = z.infer<typeof baseSchema>
 
 const repeatOptions = Object.entries(REPEATS).map(([value, { label }]) => ({ value, label }))
+
+const withCurrentCategory = (names: string[], current: string) =>
+  current && !names.includes(current) ? [current, ...names] : names
 
 function initialValues(
   state: TransactionDialogState,
@@ -194,6 +197,9 @@ function TransactionForm({
 }) {
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: financeKey })
+  const categories = useQuery(categoriesQueryOptions)
+  const categoryNames = (kind: TransactionKind) =>
+    categories.data?.items.filter((c) => c.kind === kind).map((c) => c.name) ?? []
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -312,7 +318,7 @@ function TransactionForm({
         listeners={{
           onChange: ({ value }) => {
             const category = form.getFieldValue("category")
-            if (category && !(CATEGORIES[value] as readonly string[]).includes(category)) {
+            if (category && !categoryNames(value).includes(category)) {
               form.setFieldValue("category", "")
             }
           },
@@ -388,14 +394,17 @@ function TransactionForm({
         )}
       </form.AppField>
 
-      <form.Subscribe selector={(s) => s.values.kind}>
-        {(kind) => (
+      <form.Subscribe selector={(s) => [s.values.kind, s.values.category] as const}>
+        {([kind, category]) => (
           <form.AppField name="category">
             {(field) => (
               <field.SelectField
                 label="Category"
                 placeholder="Pick a category"
-                options={CATEGORIES[kind].map((c) => ({ value: c, label: c }))}
+                options={withCurrentCategory(categoryNames(kind), category).map((name) => ({
+                  value: name,
+                  label: name,
+                }))}
               />
             )}
           </form.AppField>

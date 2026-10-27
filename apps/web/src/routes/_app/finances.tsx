@@ -7,6 +7,7 @@ import { z } from "zod"
 
 import { CashflowChart } from "~/components/finance/cashflow-chart"
 import { CategoryBreakdown } from "~/components/finance/category-breakdown"
+import { CategoryManager } from "~/components/finance/category-manager"
 import { CurrencySelect } from "~/components/finance/currency-select"
 import { PeriodPicker } from "~/components/finance/period-picker"
 import { ScheduleList } from "~/components/finance/schedule-list"
@@ -18,6 +19,7 @@ import {
 import { TransactionList } from "~/components/finance/transaction-list"
 import {
   accountsQueryOptions,
+  categoriesQueryOptions,
   CURRENCIES,
   currencyName,
   formatDate,
@@ -40,7 +42,11 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/_app/finances")({
   validateSearch: searchSchema,
-  loader: ({ context }) => context.queryClient.ensureQueryData(settingsQueryOptions),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(settingsQueryOptions),
+      context.queryClient.prefetchQuery(categoriesQueryOptions),
+    ]),
   head: () => ({ meta: [{ title: "Finances · Cockpit" }] }),
   component: FinancesPage,
 })
@@ -49,6 +55,7 @@ function FinancesPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const [dialog, setDialog] = useState<TransactionDialogState | null>(null)
+  const [managingCategories, setManagingCategories] = useState(false)
 
   const settings = useQuery(settingsQueryOptions)
   const currency = search.currency ?? settings.data?.displayCurrency
@@ -154,7 +161,10 @@ function FinancesPage() {
             onEdit={(schedule) => setDialog({ mode: "schedule", schedule })}
             onAdd={() => setDialog({ mode: "create", repeat: "monthly" })}
           />
-          <CategoryBreakdown summary={summary.data} />
+          <CategoryBreakdown
+            summary={summary.data}
+            onEditCategories={() => setManagingCategories(true)}
+          />
         </div>
       </div>
 
@@ -168,6 +178,8 @@ function FinancesPage() {
           undefined
         }
       />
+
+      <CategoryManager open={managingCategories} onOpenChange={setManagingCategories} />
     </div>
   )
 }
