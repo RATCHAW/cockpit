@@ -1,6 +1,7 @@
 import { hashPassword, verifyPassword } from "better-auth/crypto"
 import { and, eq } from "drizzle-orm"
 
+import { addDefaultCategories } from "./categories"
 import type { Database } from "./index"
 import { account, session, user } from "./schema"
 
@@ -11,10 +12,11 @@ export interface OwnerCredentials {
 }
 
 /**
- * Cockpit has exactly one account and no sign-up: this creates it with a verified email and a
- * Better Auth credential account. The given password is the source of truth: if it no longer
- * matches, the stored hash is replaced and every session is revoked. That is how you change or
- * recover the password.
+ * Cockpit has exactly one account and no sign-up: this creates it with a verified email, a
+ * Better Auth credential account and the default finance categories. The given password is the
+ * source of truth: if it no longer matches, the stored hash is replaced and every session is
+ * revoked. That is how you change or recover the password. Categories are only added on creation,
+ * so one you removed doesn't come back on the next deploy.
  */
 export async function ensureOwner(
   db: Database,
@@ -38,6 +40,7 @@ export async function ensureOwner(
         userId: id,
         password: hash,
       })
+      await addDefaultCategories(tx, id)
     })
     return { id, email, status: "created" }
   }
