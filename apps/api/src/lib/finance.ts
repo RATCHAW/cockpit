@@ -6,7 +6,6 @@ import { Data, Effect } from "effect"
 import {
   ACCOUNT_TYPES,
   ASSETS,
-  CATEGORIES,
   CURRENCIES,
   DEFAULT_CURRENCY,
   FREQUENCIES,
@@ -27,12 +26,7 @@ export const FrequencySchema = z.enum(FREQUENCIES).openapi("Frequency")
 
 export const AmountSchema = z.number().positive().max(1_000_000_000_000).openapi({ example: 49.99 })
 export const DescriptionSchema = z.string().trim().min(1).max(120).openapi({ example: "Netflix" })
-export const CategorySchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(40)
-  .openapi({ example: CATEGORIES.expense[0] })
+export const CategorySchema = z.string().trim().min(1).max(40).openapi({ example: "Groceries" })
 
 /** `?currency=` override for any read endpoint; falls back to the user's display currency. */
 export const DisplayCurrencyQuery = z.object({ currency: CurrencySchema.optional() })
