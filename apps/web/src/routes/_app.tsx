@@ -3,6 +3,8 @@ import { useSuspenseQuery } from "@tanstack/react-query"
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 
 import { AppSidebar } from "~/components/app-sidebar"
+import { TimerDock } from "~/components/pomodoro/timer-dock"
+import { PomodoroProvider } from "~/hooks/use-pomodoro"
 import { sessionQueryOptions } from "~/lib/session"
 
 export const Route = createFileRoute("/_app")({
@@ -24,16 +26,19 @@ function AppLayout() {
   if (!session) return null
 
   return (
-    <SidebarProvider>
-      <AppSidebar user={session.user} />
-      <SidebarInset className="bg-canvas">
-        <header className="flex h-14 items-center gap-2 px-4 md:hidden">
-          <SidebarTrigger />
-        </header>
-        <div className="flex-1 p-6 md:p-10">
-          <Outlet />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <PomodoroProvider key={session.user.id}>
+      <SidebarProvider>
+        <AppSidebar user={session.user} />
+        <SidebarInset className="bg-canvas">
+          <header className="flex h-14 items-center gap-2 px-4 md:hidden">
+            <SidebarTrigger />
+          </header>
+          <div className="flex-1 p-6 md:p-10">
+            <Outlet />
+          </div>
+          <TimerDock />
+        </SidebarInset>
+      </SidebarProvider>
+    </PomodoroProvider>
   )
 }

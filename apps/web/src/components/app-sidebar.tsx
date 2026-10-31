@@ -29,6 +29,7 @@ import {
   SettingsIcon,
   SquareKanbanIcon,
   TargetIcon,
+  TimerIcon,
   WalletIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -40,7 +41,7 @@ import { unwrap } from "~/lib/auth-errors"
 
 type NavItem = {
   title: string
-  to: "/" | "/finances" | "/net-worth" | "/projects" | "/board" | "/settings"
+  to: "/" | "/finances" | "/net-worth" | "/projects" | "/board" | "/settings" | "/pomodoro"
   icon: LucideIcon
 }
 
@@ -49,6 +50,7 @@ const nav: NavItem[] = [
   { title: "Overview", to: "/", icon: LayoutGridIcon },
   { title: "Projects", to: "/projects", icon: TargetIcon },
   { title: "Board", to: "/board", icon: SquareKanbanIcon },
+  { title: "Pomodoro", to: "/pomodoro", icon: TimerIcon },
   { title: "Finances", to: "/finances", icon: WalletIcon },
   { title: "Net worth", to: "/net-worth", icon: LandmarkIcon },
 ]
