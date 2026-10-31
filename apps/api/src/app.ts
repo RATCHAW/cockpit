@@ -14,6 +14,7 @@ import { habitRoutes } from "./routes/habits"
 import { healthRoutes } from "./routes/health"
 import { meRoutes } from "./routes/me"
 import { projectRoutes } from "./routes/projects"
+import { pomodoroRoutes } from "./routes/pomodoro"
 import { recurringRoutes } from "./routes/recurring"
 import { settingsRoutes } from "./routes/settings"
 import { taskRoutes } from "./routes/tasks"
@@ -51,6 +52,7 @@ export const app = api
   .route("/", projectRoutes)
   .route("/", habitRoutes)
   .route("/", taskRoutes)
+  .route("/", pomodoroRoutes)
 
 app.doc31("/openapi.json", {
   openapi: "3.1.0",

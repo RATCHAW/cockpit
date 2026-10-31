@@ -3,6 +3,7 @@ import { accountsSeeder } from "./accounts"
 import { categoriesSeeder } from "./categories"
 import { financesSeeder } from "./finances"
 import { projectsSeeder } from "./projects"
+import { pomodoroSeeder } from "./pomodoro"
 
 /**
  * Feature seeders, run in order after the admin user is created.
@@ -28,4 +29,10 @@ import { projectsSeeder } from "./projects"
  * ```
  */
 // Accounts come first so the finance demo can say which account each transaction used.
-export const seeders: Seeder[] = [accountsSeeder, categoriesSeeder, financesSeeder, projectsSeeder]
+export const seeders: Seeder[] = [
+  accountsSeeder,
+  categoriesSeeder,
+  financesSeeder,
+  projectsSeeder,
+  pomodoroSeeder,
+]

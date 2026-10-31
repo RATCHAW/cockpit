@@ -50,6 +50,13 @@
       "when": 1793109862269,
       "tag": "0006_rare_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793459274762,
+      "tag": "0007_yummy_lily_hollister",
+      "breakpoints": true
     }
   ]
 }
