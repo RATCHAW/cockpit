@@ -27,28 +27,30 @@ export function focusAnalytics(
   const sessions: ReturnType<typeof sessionDto>[] = []
 
   for (const row of rows) {
-    if (row.kind !== "focus" || !row.finishedAt) continue
+    if ((row.kind !== "focus" && row.kind !== "flow") || !row.finishedAt) continue
     const date = dateInTimezone(row.finishedAt, timezone)
+    // Completed/interrupted count pomodoros toward the daily goal; flow only adds time.
+    const pomodoro = row.kind === "focus"
     if (row.status === "completed") completedDays.add(date)
     if (date === today) {
       todayStats.seconds += row.elapsedSeconds
-      if (row.status === "completed") todayStats.completed++
+      if (pomodoro && row.status === "completed") todayStats.completed++
     }
     const day = byDate.get(date)
     if (!day) continue
     day.seconds += row.elapsedSeconds
-    if (row.status === "completed") day.completed++
-    if (row.status === "interrupted") day.interrupted++
+    if (pomodoro && row.status === "completed") day.completed++
+    if (pomodoro && row.status === "interrupted") day.interrupted++
     const name = row.projectName ?? "No project"
     const group = projects.get(name) ?? { name, seconds: 0, completed: 0 }
     group.seconds += row.elapsedSeconds
-    if (row.status === "completed") group.completed++
+    if (pomodoro && row.status === "completed") group.completed++
     projects.set(name, group)
     sessions.push({
       ...row,
       startedAt: row.startedAt.toISOString(),
       finishedAt: row.finishedAt.toISOString(),
-      endsAt: null,
+      resumedAt: null,
     })
   }
   const summary = series.reduce(

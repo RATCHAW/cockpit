@@ -1,0 +1,1 @@
+ALTER TABLE "pomodoro_session" DROP COLUMN "ends_at";

@@ -1,7 +1,7 @@
 import { schema, type Database } from "@cockpit/db"
-import { and, count, desc, eq, inArray, lte } from "drizzle-orm"
+import { and, count, desc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm"
 
-import { DEFAULT_POMODORO_SETTINGS, plannedSeconds } from "../shared/pomodoro"
+import { DEFAULT_POMODORO_SETTINGS, liveElapsedSeconds, plannedSeconds } from "../shared/pomodoro"
 import type { PomodoroKind } from "../shared/pomodoro"
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -10,7 +10,7 @@ export type FocusSession = typeof schema.pomodoroSession.$inferSelect
 export const sessionDto = (row: FocusSession) => ({
   ...row,
   startedAt: row.startedAt.toISOString(),
-  endsAt: row.endsAt?.toISOString() ?? null,
+  resumedAt: row.resumedAt?.toISOString() ?? null,
   finishedAt: row.finishedAt?.toISOString() ?? null,
 })
 
@@ -20,20 +20,20 @@ const activeWhere = (userId: string) =>
     inArray(schema.pomodoroSession.status, ["running", "paused"]),
   )
 
+const { plannedSeconds: planned, elapsedSeconds: elapsed, resumedAt } = schema.pomodoroSession
+const deadline = sql<Date>`${resumedAt} + (${planned} - ${elapsed}) * interval '1 second'`
+
+/** Completes an overdue countdown at its deadline. Flow sessions never end on their own. */
 export async function settleTimer(tx: Transaction, userId: string, now: Date) {
   await tx
     .update(schema.pomodoroSession)
-    .set({
-      status: "completed",
-      elapsedSeconds: schema.pomodoroSession.plannedSeconds,
-      finishedAt: schema.pomodoroSession.endsAt,
-      endsAt: null,
-    })
+    .set({ status: "completed", elapsedSeconds: planned, finishedAt: deadline, resumedAt: null })
     .where(
       and(
         eq(schema.pomodoroSession.userId, userId),
         eq(schema.pomodoroSession.status, "running"),
-        lte(schema.pomodoroSession.endsAt, now),
+        isNotNull(planned),
+        lte(deadline, now),
       ),
     )
 }
@@ -97,11 +97,11 @@ export async function changeTimer(tx: Transaction, userId: string, input: TimerA
     if (existing) return null
     if (current) return "A timer is already active. Pause or stop it first."
 
-    let title = input.title?.trim() || "Focus session"
+    let title = input.title?.trim() || (input.kind === "flow" ? "Flow session" : "Focus session")
     let projectId = input.projectId ?? null
     let taskId: string | null = null
     let projectName: string | null = null
-    if (input.kind === "focus") {
+    if (input.kind === "focus" || input.kind === "flow") {
       if (input.taskId) {
         const [task] = await tx
           .select()
@@ -140,7 +140,7 @@ export async function changeTimer(tx: Transaction, userId: string, input: TimerA
       projectName,
       plannedSeconds: seconds,
       startedAt: now,
-      endsAt: new Date(now.getTime() + seconds * 1000),
+      resumedAt: now,
     })
     return null
   }
@@ -148,32 +148,24 @@ export async function changeTimer(tx: Transaction, userId: string, input: TimerA
   // Repeated commands for a finished session are harmless. Never affect a newer timer.
   if (!current || current.id !== input.id) return null
   const where = eq(schema.pomodoroSession.id, current.id)
-  const elapsed = current.endsAt
-    ? Math.max(
-        current.elapsedSeconds,
-        Math.min(
-          current.plannedSeconds,
-          current.plannedSeconds - Math.ceil((current.endsAt.getTime() - now.getTime()) / 1000),
-        ),
-      )
-    : current.elapsedSeconds
+  const worked = liveElapsedSeconds(current, now.getTime())
   if (input.action === "pause" && current.status === "running") {
     await tx
       .update(schema.pomodoroSession)
-      .set({ status: "paused", elapsedSeconds: elapsed, endsAt: null })
+      .set({ status: "paused", elapsedSeconds: worked, resumedAt: null })
       .where(where)
   } else if (input.action === "resume" && current.status === "paused") {
-    await tx
-      .update(schema.pomodoroSession)
-      .set({
-        status: "running",
-        endsAt: new Date(now.getTime() + (current.plannedSeconds - elapsed) * 1000),
-      })
-      .where(where)
+    await tx.update(schema.pomodoroSession).set({ status: "running", resumedAt: now }).where(where)
   } else if (input.action === "stop") {
     await tx
       .update(schema.pomodoroSession)
-      .set({ status: "interrupted", elapsedSeconds: elapsed, endsAt: null, finishedAt: now })
+      .set({
+        // Finishing is a flow's natural end; a countdown stopped early is an interruption.
+        status: current.kind === "flow" ? "completed" : "interrupted",
+        elapsedSeconds: worked,
+        resumedAt: null,
+        finishedAt: now,
+      })
       .where(where)
   }
   return null

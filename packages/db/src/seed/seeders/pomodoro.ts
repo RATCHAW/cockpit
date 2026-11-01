@@ -40,7 +40,7 @@ export const pomodoroSeeder: Seeder = {
           plannedSeconds: f.default({ defaultValue: 1500 }),
           elapsedSeconds: f.default({ defaultValue: 1500 }),
           startedAt: f.default({ defaultValue: new Date(finishedDates[29]!.getTime() - 1500_000) }),
-          endsAt: f.default({ defaultValue: null }),
+          resumedAt: f.default({ defaultValue: null }),
           finishedAt: f.date({ minDate: finishedDates[29], maxDate: finishedDates[0] }),
         },
       },

@@ -15,7 +15,7 @@ import {
 import { user } from "./auth"
 import { project, task } from "./projects"
 
-export const pomodoroKind = pgEnum("pomodoro_kind", ["focus", "short_break", "long_break"])
+export const pomodoroKind = pgEnum("pomodoro_kind", ["focus", "short_break", "long_break", "flow"])
 export const pomodoroStatus = pgEnum("pomodoro_status", [
   "running",
   "paused",
@@ -49,10 +49,11 @@ export const pomodoroSession = pgTable(
     // Snapshots preserve meaningful reports when a task/project is renamed or deleted.
     title: text().notNull(),
     projectName: text(),
-    plannedSeconds: integer().notNull(),
+    plannedSeconds: integer(),
     elapsedSeconds: integer().notNull().default(0),
     startedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    endsAt: timestamp({ withTimezone: true }),
+    // Start of the current running stretch; the countdown deadline is derived from it.
+    resumedAt: timestamp({ withTimezone: true }),
     finishedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
@@ -60,11 +61,13 @@ export const pomodoroSession = pgTable(
     uniqueIndex("pomodoro_one_active_per_user")
       .on(t.userId)
       .where(sql`${t.status} in ('running', 'paused')`),
+    // Cast to text: a new enum value can't be referenced in the migration transaction that adds it.
+    check("pomodoro_target", sql`(${t.kind}::text = 'flow') = (${t.plannedSeconds} is null)`),
     check(
       "pomodoro_duration",
-      sql`${t.plannedSeconds} > 0 and ${t.elapsedSeconds} >= 0 and ${t.elapsedSeconds} <= ${t.plannedSeconds}`,
+      sql`${t.elapsedSeconds} >= 0 and (${t.plannedSeconds} is null or (${t.plannedSeconds} > 0 and ${t.elapsedSeconds} <= ${t.plannedSeconds}))`,
     ),
-    check("pomodoro_deadline", sql`(${t.status} = 'running') = (${t.endsAt} is not null)`),
+    check("pomodoro_running", sql`(${t.status} = 'running') = (${t.resumedAt} is not null)`),
     check(
       "pomodoro_finished",
       sql`(${t.status} in ('completed', 'interrupted')) = (${t.finishedAt} is not null)`,
