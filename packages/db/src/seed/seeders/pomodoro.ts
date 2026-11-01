@@ -40,7 +40,30 @@ export const pomodoroSeeder: Seeder = {
           plannedSeconds: f.default({ defaultValue: 1500 }),
           elapsedSeconds: f.default({ defaultValue: 1500 }),
           startedAt: f.default({ defaultValue: new Date(finishedDates[29]!.getTime() - 1500_000) }),
-          endsAt: f.default({ defaultValue: null }),
+          resumedAt: f.default({ defaultValue: null }),
+          finishedAt: f.date({ minDate: finishedDates[29], maxDate: finishedDates[0] }),
+        },
+      },
+    }))
+    await seed(db, { pomodoroSession }, { seed: 43 }).refine((f) => ({
+      pomodoroSession: {
+        count: 15,
+        columns: {
+          userId: f.default({ defaultValue: admin.id }),
+          kind: f.default({ defaultValue: "flow" }),
+          status: f.default({ defaultValue: "completed" }),
+          taskId: f.default({ defaultValue: null }),
+          projectId: f.default({ defaultValue: null }),
+          title: f.valuesFromArray({
+            values: ["Writing", "Long build session", "Research rabbit hole", "Refactor day"],
+          }),
+          projectName: f.valuesFromArray({
+            values: projects.length ? projects.map((p) => p.name) : ["Personal"],
+          }),
+          plannedSeconds: f.default({ defaultValue: null }),
+          elapsedSeconds: f.int({ minValue: 45 * 60, maxValue: 180 * 60 }),
+          startedAt: f.default({ defaultValue: finishedDates[29] }),
+          resumedAt: f.default({ defaultValue: null }),
           finishedAt: f.date({ minDate: finishedDates[29], maxDate: finishedDates[0] }),
         },
       },
@@ -49,7 +72,7 @@ export const pomodoroSeeder: Seeder = {
     await db
       .update(pomodoroSession)
       .set({
-        startedAt: sql`${pomodoroSession.finishedAt} - ${pomodoroSession.plannedSeconds} * interval '1 second'`,
+        startedAt: sql`${pomodoroSession.finishedAt} - ${pomodoroSession.elapsedSeconds} * interval '1 second'`,
       })
       .where(eq(pomodoroSession.userId, admin.id))
   },

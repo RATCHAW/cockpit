@@ -6,7 +6,7 @@ import { usePomodoro } from "~/hooks/use-pomodoro"
 import { clockLabel, POMODORO_LABELS } from "~/lib/pomodoro"
 
 export function TimerDock() {
-  const { current, remaining, act, pending } = usePomodoro()
+  const { current, elapsed, remaining, act, pending } = usePomodoro()
   const location = useLocation()
   if (!current || location.pathname === "/pomodoro") return null
   return (
@@ -20,7 +20,7 @@ export function TimerDock() {
           {POMODORO_LABELS[current.kind]} · {current.title}
         </span>
         <span className="text-body-lg font-semibold tabular-nums">
-          {clockLabel(remaining)}
+          {clockLabel(remaining ?? elapsed)}
           {current.status === "paused" ? " · Paused" : ""}
         </span>
       </Link>

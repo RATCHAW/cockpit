@@ -4,13 +4,15 @@ import { parseResponse, type InferRequestType, type InferResponseType } from "ho
 import { api } from "./api"
 
 export {
+  clockLabel,
+  liveElapsedSeconds,
   nextKind,
   plannedSeconds,
   POMODORO_LABELS,
   PomodoroSettingsSchema,
   remainingSeconds,
 } from "@cockpit/api/pomodoro"
-export type { PomodoroKind, PomodoroSettings } from "@cockpit/api/pomodoro"
+export type { CountdownKind, PomodoroKind, PomodoroSettings } from "@cockpit/api/pomodoro"
 
 export type TimerAction = InferRequestType<typeof api.pomodoro.$post>["json"]
 export type TimerState = InferResponseType<typeof api.pomodoro.$get, 200>
@@ -36,14 +38,6 @@ export const analyticsQueryOptions = (from: string, to: string) => {
     queryFn: () => parseResponse(api.pomodoro.analytics.$get({ query: { from, to, timezone } })),
     refetchInterval: 60_000,
   })
-}
-
-export function clockLabel(seconds: number) {
-  return `${Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0")}:${Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0")}`
 }
 
 export function durationLabel(seconds: number) {

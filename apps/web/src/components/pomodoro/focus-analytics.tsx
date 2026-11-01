@@ -75,7 +75,7 @@ export function TodayFocus() {
                   {data.streak} day{data.streak === 1 ? "" : "s"} in a row
                 </p>
                 <p className="text-caption text-body">
-                  Complete one focus session to keep it going.
+                  Complete a focus session or finish a flow to keep it going.
                 </p>
               </div>
             </div>
@@ -93,8 +93,12 @@ export function TodayFocus() {
           interval when you’re ready.
         </p>
         <p>
-          Ending early saves the time you put in. Only full focus sessions count toward your goal
-          and streak.
+          Ending early saves the time you put in, but only full focus sessions count toward your
+          goal.
+        </p>
+        <p>
+          Prefer no clock? Switch to Flow and work as long as you like. Flow time counts toward your
+          focused time and streak, but not your session goal.
         </p>
       </section>
     </aside>
@@ -269,8 +273,8 @@ export function FocusReport() {
           </div>
           <p className="text-caption text-body">
             Times use your timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}). Sessions
-            count on the day they finish. Focus totals include time from sessions ended early;
-            breaks and pauses are excluded.
+            count on the day they finish. Focus totals include flow time and time from sessions
+            ended early; breaks and pauses are excluded. Session counts are pomodoros only.
           </p>
         </div>
       )}
@@ -357,10 +361,16 @@ function SessionHistory({ sessions }: { sessions: FocusAnalytics["sessions"] }) 
                 <span
                   className={cn(
                     "text-caption",
-                    session.status === "completed" ? "text-positive-deep" : "text-body",
+                    session.kind !== "flow" && session.status === "completed"
+                      ? "text-positive-deep"
+                      : "text-body",
                   )}
                 >
-                  {session.status === "completed" ? "Completed" : "Ended early"}
+                  {session.kind === "flow"
+                    ? "Flow"
+                    : session.status === "completed"
+                      ? "Completed"
+                      : "Ended early"}
                 </span>
               </div>
             </li>

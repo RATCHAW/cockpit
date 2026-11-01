@@ -11,7 +11,9 @@ import {
 import { cn } from "@cockpit/ui/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import {
+  CheckIcon,
   CoffeeIcon,
+  InfinityIcon,
   PauseIcon,
   PlayIcon,
   Settings2Icon,
@@ -26,17 +28,18 @@ import {
   nextKind,
   plannedSeconds,
   POMODORO_LABELS,
+  type CountdownKind,
   type PomodoroKind,
 } from "~/lib/pomodoro"
 import { projectsQueryOptions, tasksQueryOptions } from "~/lib/projects"
 
 import { PomodoroSettingsDialog } from "./settings-dialog"
 
-const kinds: PomodoroKind[] = ["focus", "short_break", "long_break"]
+const kinds: CountdownKind[] = ["focus", "short_break", "long_break"]
 
 export function FocusTimer() {
   const timer = usePomodoro()
-  const { query, current, remaining, act, pending } = timer
+  const { query, current, elapsed, remaining, act, pending } = timer
   const [selection, setSelection] = useState<{ kind: PomodoroKind; after: string | null } | null>(
     null,
   )
@@ -68,14 +71,17 @@ export function FocusTimer() {
     )
 
   const lastId = state.lastSession?.id ?? null
-  const kind =
-    current?.kind ??
-    (selection?.after === lastId
-      ? selection.kind
-      : nextKind(state.lastSession, state.completedFocusCount, state.settings.longBreakEvery))
-  const seconds = current ? remaining : plannedSeconds(kind, state.settings)
-  const total = current?.plannedSeconds ?? plannedSeconds(kind, state.settings)
-  const progress = Math.min(100, Math.max(0, 100 * (1 - seconds / total)))
+  const suggested = nextKind(
+    state.lastSession,
+    state.completedFocusCount,
+    state.settings.longBreakEvery,
+  )
+  const kind = current?.kind ?? (selection?.after === lastId ? selection.kind : suggested)
+  const flow = kind === "flow"
+  const total = current ? current.plannedSeconds : plannedSeconds(kind, state.settings)
+  const seconds = current ? (remaining ?? elapsed) : (total ?? 0)
+  const progress = total ? Math.min(100, Math.max(0, 100 * (1 - seconds / total))) : 0
+  const finishing = remaining === 0
   const cycle = state.completedFocusCount % state.settings.longBreakEvery
   const activeTask = tasks.data?.items.find((task) => task.id === taskId)
 
@@ -108,55 +114,85 @@ export function FocusTimer() {
           <Settings2Icon />
         </Button>
       </div>
-      <div className="flex flex-wrap justify-center gap-2" aria-label="Timer mode">
-        {kinds.map((value) => (
-          <Button
-            key={value}
-            variant={kind === value ? "dark" : "ghost"}
-            size="sm"
-            aria-pressed={kind === value}
-            disabled={!!current || pending}
-            onClick={() => setSelection({ kind: value, after: lastId })}
-          >
-            {POMODORO_LABELS[value]}
-          </Button>
-        ))}
+      <div className="grid justify-items-center gap-4">
+        <div className="flex rounded-xl bg-ink/5 p-1" aria-label="Timer style">
+          {(
+            [
+              ["pomodoro", "Pomodoro", suggested === "flow" ? "focus" : suggested],
+              ["flow", "Flow", "flow"],
+            ] as const
+          ).map(([mode, label, target]) => (
+            <Button
+              key={mode}
+              size="sm"
+              variant="ghost"
+              className={cn((mode === "flow") === flow && "bg-canvas")}
+              aria-pressed={(mode === "flow") === flow}
+              disabled={!!current || pending}
+              onClick={() => setSelection({ kind: target, after: lastId })}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        {flow ? null : (
+          <div className="flex flex-wrap justify-center gap-2" aria-label="Pomodoro interval">
+            {kinds.map((value) => (
+              <Button
+                key={value}
+                variant={kind === value ? "dark" : "ghost"}
+                size="sm"
+                aria-pressed={kind === value}
+                disabled={!!current || pending}
+                onClick={() => setSelection({ kind: value, after: lastId })}
+              >
+                {POMODORO_LABELS[value]}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="grid justify-items-center gap-6 py-4 sm:py-6">
-        {kind === "focus" ? (
+        {flow ? (
+          <InfinityIcon className="size-6 text-body" aria-hidden />
+        ) : kind === "focus" ? (
           <TargetIcon className="size-6 text-body" aria-hidden />
         ) : (
           <CoffeeIcon className="size-6 text-body" aria-hidden />
         )}
         <p
           role="timer"
-          aria-label={`${POMODORO_LABELS[kind]} time remaining`}
+          aria-label={`${POMODORO_LABELS[kind]} time ${flow ? "elapsed" : "remaining"}`}
           aria-live="off"
           className="font-display text-[clamp(4rem,12vw,7.5rem)] leading-none font-extrabold tracking-tighter tabular-nums"
         >
           {clockLabel(seconds)}
         </p>
         <p className="text-center text-body-sm text-body">
-          {kind === "focus"
-            ? "Give this moment your full attention."
-            : "Step away. Stretch. Come back fresh."}
+          {flow
+            ? "No clock to beat. Pause whenever you need."
+            : kind === "focus"
+              ? "Give this moment your full attention."
+              : "Step away. Stretch. Come back fresh."}
         </p>
-        <div
-          role="progressbar"
-          aria-label="Interval progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.floor(progress)}
-          className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-ink/10"
-        >
-          <div className="h-full rounded-full bg-ink" style={{ width: `${progress}%` }} />
-        </div>
+        {flow ? null : (
+          <div
+            role="progressbar"
+            aria-label="Interval progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.floor(progress)}
+            className="h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-ink/10"
+          >
+            <div className="h-full rounded-full bg-ink" style={{ width: `${progress}%` }} />
+          </div>
+        )}
         <div className="flex flex-wrap justify-center gap-3">
           {current ? (
             <>
               <Button
                 size="lg"
-                disabled={pending || seconds === 0}
+                disabled={pending || finishing}
                 onClick={() =>
                   act({ action: current.status === "running" ? "pause" : "resume", id: current.id })
                 }
@@ -164,7 +200,7 @@ export function FocusTimer() {
                 {current.status === "running" ? <PauseIcon /> : <PlayIcon />}
                 {pending
                   ? "Updating…"
-                  : seconds === 0
+                  : finishing
                     ? "Finishing…"
                     : current.status === "running"
                       ? "Pause"
@@ -173,11 +209,11 @@ export function FocusTimer() {
               <Button
                 variant="outline"
                 size="lg"
-                disabled={pending || seconds === 0}
+                disabled={pending || finishing}
                 onClick={() => act({ action: "stop", id: current.id })}
               >
-                <SquareIcon />
-                End early
+                {flow ? <CheckIcon /> : <SquareIcon />}
+                {flow ? "Finish" : "End early"}
               </Button>
             </>
           ) : (
@@ -197,7 +233,9 @@ export function FocusTimer() {
               }
             >
               <PlayIcon />
-              {pending ? "Starting…" : `Start ${kind === "focus" ? "focus" : "break"}`}
+              {pending
+                ? "Starting…"
+                : `Start ${flow ? "flow" : kind === "focus" ? "focus" : "break"}`}
             </Button>
           )}
         </div>
@@ -210,32 +248,34 @@ export function FocusTimer() {
           </button>
         </p>
       ) : null}
-      <div
-        className="flex items-center justify-center gap-2"
-        aria-label={`${cycle} of ${state.settings.longBreakEvery} focus sessions in this cycle`}
-      >
-        {Array.from({ length: state.settings.longBreakEvery }, (_, index) => (
-          <span
-            key={index}
-            aria-hidden
-            className={cn("size-2.5 rounded-full", index < cycle ? "bg-ink" : "bg-ink/15")}
-          />
-        ))}
-        <span className="ml-2 text-caption text-body">
-          Long break every {state.settings.longBreakEvery} sessions
-        </span>
-      </div>
+      {flow ? null : (
+        <div
+          className="flex items-center justify-center gap-2"
+          aria-label={`${cycle} of ${state.settings.longBreakEvery} focus sessions in this cycle`}
+        >
+          {Array.from({ length: state.settings.longBreakEvery }, (_, index) => (
+            <span
+              key={index}
+              aria-hidden
+              className={cn("size-2.5 rounded-full", index < cycle ? "bg-ink" : "bg-ink/15")}
+            />
+          ))}
+          <span className="ml-2 text-caption text-body">
+            Long break every {state.settings.longBreakEvery} sessions
+          </span>
+        </div>
+      )}
       {current ? (
         <div className="grid gap-1 border-t border-ink/10 pt-5 text-center">
           <p className="text-caption text-body">
-            {kind === "focus" ? "Working on" : "Taking a breather"}
+            {kind === "focus" || flow ? "Working on" : "Taking a breather"}
           </p>
           <p className="font-semibold wrap-anywhere">{current.title}</p>
           {current.projectName ? (
             <p className="text-body-sm text-body">{current.projectName}</p>
           ) : null}
         </div>
-      ) : kind === "focus" ? (
+      ) : kind === "focus" || flow ? (
         <div className="grid gap-4 border-t border-ink/10 pt-5">
           <div className="grid gap-2">
             <Label htmlFor="focus-task">What are you working on?</Label>

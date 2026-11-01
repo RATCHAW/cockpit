@@ -21,10 +21,12 @@ const SessionSchema = z
     projectId: z.uuid().nullable(),
     title: z.string(),
     projectName: z.string().nullable(),
-    plannedSeconds: z.number(),
+    plannedSeconds: z.number().nullable().openapi({ description: "Null for flow sessions" }),
     elapsedSeconds: z.number(),
     startedAt: z.iso.datetime(),
-    endsAt: z.iso.datetime().nullable(),
+    resumedAt: z.iso.datetime().nullable().openapi({
+      description: "Start of the current running stretch; null unless running",
+    }),
     finishedAt: z.iso.datetime().nullable(),
   })
   .openapi("PomodoroSession")
@@ -135,7 +137,7 @@ const analyticsRoute = createRoute({
   tags: ["Pomodoro"],
   summary: "Daily focus history in your timezone",
   description:
-    "Focus time includes stopped sessions and excludes breaks and pauses. Each session is credited to its finish date. History contains the latest 50 focus sessions in the range.",
+    "Focus time includes focus sessions (completed or stopped) and flow sessions, and excludes breaks and pauses. Completed and interrupted counts are focus sessions only; flow adds time, active days and streak but not session counts. Each session is credited to its finish date. History contains the latest 50 focus and flow sessions in the range.",
   middleware: [requireAuth] as const,
   request: { query: AnalyticsQuery },
   responses: {
@@ -203,7 +205,7 @@ export const pomodoroRoutes = createRouter()
         .where(
           and(
             eq(schema.pomodoroSession.userId, userId),
-            eq(schema.pomodoroSession.kind, "focus"),
+            inArray(schema.pomodoroSession.kind, ["focus", "flow"]),
             inArray(schema.pomodoroSession.status, ["completed", "interrupted"]),
           ),
         )

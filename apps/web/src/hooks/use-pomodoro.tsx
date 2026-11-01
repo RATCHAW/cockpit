@@ -7,6 +7,8 @@ import { api } from "~/lib/api"
 import {
   analyticsKey,
   clockLabel,
+  durationLabel,
+  liveElapsedSeconds,
   pomodoroKey,
   POMODORO_LABELS,
   remainingSeconds,
@@ -22,7 +24,9 @@ function useTimer() {
   const observed = useRef<string | null>(null)
   const checked = useRef<string | null>(null)
   const current = query.data?.current
-  const remaining = current ? remainingSeconds(current, now + (query.data?.clockOffset ?? 0)) : 0
+  const serverNow = now + (query.data?.clockOffset ?? 0)
+  const elapsed = current ? liveElapsedSeconds(current, serverNow) : 0
+  const remaining = current ? remainingSeconds(current, serverNow) : null
 
   useEffect(() => {
     const interval = window.setInterval(
@@ -50,6 +54,10 @@ function useTimer() {
     checked.current = null
     void queryClient.invalidateQueries({ queryKey: analyticsKey })
     if (last.status !== "completed") return
+    if (last.kind === "flow") {
+      toast.success(`Logged ${durationLabel(last.elapsedSeconds)} of flow.`)
+      return
+    }
     toast.success(
       last.kind === "focus"
         ? "Focus session complete. Time for a break."
@@ -70,7 +78,7 @@ function useTimer() {
   }, [current, query.data?.lastSession, query.data?.settings.soundEnabled, queryClient])
 
   const title = current
-    ? `${clockLabel(remaining)} · ${POMODORO_LABELS[current.kind]} · Cockpit`
+    ? `${clockLabel(remaining ?? elapsed)} · ${POMODORO_LABELS[current.kind]} · Cockpit`
     : null
   useEffect(() => {
     if (!title) return
@@ -116,7 +124,7 @@ function useTimer() {
     mutation.mutate(input)
   }
 
-  return { query, current, remaining, act, pending: mutation.isPending, now }
+  return { query, current, elapsed, remaining, act, pending: mutation.isPending, now }
 }
 
 const TimerContext = createContext<ReturnType<typeof useTimer> | null>(null)
