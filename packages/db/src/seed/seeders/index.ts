@@ -2,6 +2,7 @@ import type { Seeder } from "../types"
 import { accountsSeeder } from "./accounts"
 import { categoriesSeeder } from "./categories"
 import { financesSeeder } from "./finances"
+import { ideasSeeder } from "./ideas"
 import { projectsSeeder } from "./projects"
 import { pomodoroSeeder } from "./pomodoro"
 
@@ -35,4 +36,5 @@ export const seeders: Seeder[] = [
   financesSeeder,
   projectsSeeder,
   pomodoroSeeder,
+  ideasSeeder,
 ]

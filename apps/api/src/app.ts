@@ -12,6 +12,7 @@ import { categoryRoutes } from "./routes/categories"
 import { financeRoutes } from "./routes/finance"
 import { habitRoutes } from "./routes/habits"
 import { healthRoutes } from "./routes/health"
+import { ideaRoutes } from "./routes/ideas"
 import { meRoutes } from "./routes/me"
 import { projectRoutes } from "./routes/projects"
 import { pomodoroRoutes } from "./routes/pomodoro"
@@ -53,6 +54,7 @@ export const app = api
   .route("/", habitRoutes)
   .route("/", taskRoutes)
   .route("/", pomodoroRoutes)
+  .route("/", ideaRoutes)
 
 app.doc31("/openapi.json", {
   openapi: "3.1.0",
