@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBoardRouteImport } from './routes/_app/board'
 import { Route as AppFinancesRouteImport } from './routes/_app/finances'
+import { Route as AppIdeasRouteImport } from './routes/_app/ideas'
 import { Route as AppNetWorthRouteImport } from './routes/_app/net-worth'
 import { Route as AppPomodoroRouteImport } from './routes/_app/pomodoro'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
@@ -42,6 +43,11 @@ const AppBoardRoute = AppBoardRouteImport.update({
 const AppFinancesRoute = AppFinancesRouteImport.update({
   id: '/finances',
   path: '/finances',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIdeasRoute = AppIdeasRouteImport.update({
+  id: '/ideas',
+  path: '/ideas',
   getParentRoute: () => AppRoute,
 } as any)
 const AppNetWorthRoute = AppNetWorthRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/board': typeof AppBoardRoute
   '/finances': typeof AppFinancesRoute
+  '/ideas': typeof AppIdeasRoute
   '/net-worth': typeof AppNetWorthRoute
   '/pomodoro': typeof AppPomodoroRoute
   '/settings': typeof AppSettingsRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/board': typeof AppBoardRoute
   '/finances': typeof AppFinancesRoute
+  '/ideas': typeof AppIdeasRoute
   '/net-worth': typeof AppNetWorthRoute
   '/pomodoro': typeof AppPomodoroRoute
   '/settings': typeof AppSettingsRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/_app/board': typeof AppBoardRoute
   '/_app/finances': typeof AppFinancesRoute
+  '/_app/ideas': typeof AppIdeasRoute
   '/_app/net-worth': typeof AppNetWorthRoute
   '/_app/pomodoro': typeof AppPomodoroRoute
   '/_app/settings': typeof AppSettingsRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/board'
     | '/finances'
+    | '/ideas'
     | '/net-worth'
     | '/pomodoro'
     | '/settings'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/board'
     | '/finances'
+    | '/ideas'
     | '/net-worth'
     | '/pomodoro'
     | '/settings'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '/_auth'
     | '/_app/board'
     | '/_app/finances'
+    | '/_app/ideas'
     | '/_app/net-worth'
     | '/_app/pomodoro'
     | '/_app/settings'
@@ -191,6 +203,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFinancesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/ideas': {
+      id: '/_app/ideas'
+      path: '/ideas'
+      fullPath: '/ideas'
+      preLoaderRoute: typeof AppIdeasRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/net-worth': {
       id: '/_app/net-worth'
       path: '/net-worth'
@@ -239,6 +258,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppBoardRoute: typeof AppBoardRoute
   AppFinancesRoute: typeof AppFinancesRoute
+  AppIdeasRoute: typeof AppIdeasRoute
   AppNetWorthRoute: typeof AppNetWorthRoute
   AppPomodoroRoute: typeof AppPomodoroRoute
   AppSettingsRoute: typeof AppSettingsRoute
@@ -250,6 +270,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppBoardRoute: AppBoardRoute,
   AppFinancesRoute: AppFinancesRoute,
+  AppIdeasRoute: AppIdeasRoute,
   AppNetWorthRoute: AppNetWorthRoute,
   AppPomodoroRoute: AppPomodoroRoute,
   AppSettingsRoute: AppSettingsRoute,

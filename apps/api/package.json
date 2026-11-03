@@ -7,7 +7,8 @@
     "./client": "./src/client.ts",
     "./finance": "./src/shared/finance.ts",
     "./projects": "./src/shared/projects.ts",
-    "./pomodoro": "./src/shared/pomodoro.ts"
+    "./pomodoro": "./src/shared/pomodoro.ts",
+    "./ideas": "./src/shared/ideas.ts"
   },
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
@@ -16,7 +17,8 @@
     "auth:generate": "auth generate --config src/lib/auth.ts --output ../../packages/db/src/schema/auth.ts -y",
     "lint": "eslint .",
     "typecheck": "tsc",
-    "test:pomodoro": "tsx --test src/lib/pomodoro-analytics.test.ts src/routes/pomodoro.test.ts"
+    "test:pomodoro": "tsx --test src/lib/pomodoro-analytics.test.ts src/routes/pomodoro.test.ts",
+    "test:ideas": "tsx --test src/routes/ideas.test.ts"
   },
   "dependencies": {
     "@cockpit/db": "workspace:*",

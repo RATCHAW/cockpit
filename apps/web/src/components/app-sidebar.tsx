@@ -25,6 +25,7 @@ import {
   ChevronsUpDownIcon,
   LandmarkIcon,
   LayoutGridIcon,
+  LightbulbIcon,
   LogOutIcon,
   SettingsIcon,
   SquareKanbanIcon,
@@ -41,13 +42,15 @@ import { unwrap } from "~/lib/auth-errors"
 
 type NavItem = {
   title: string
-  to: "/" | "/finances" | "/net-worth" | "/projects" | "/board" | "/settings" | "/pomodoro"
+  to:
+    "/" | "/finances" | "/net-worth" | "/projects" | "/board" | "/settings" | "/pomodoro" | "/ideas"
   icon: LucideIcon
 }
 
 /** Sections get added here as they're built. */
 const nav: NavItem[] = [
   { title: "Overview", to: "/", icon: LayoutGridIcon },
+  { title: "Ideas", to: "/ideas", icon: LightbulbIcon },
   { title: "Projects", to: "/projects", icon: TargetIcon },
   { title: "Board", to: "/board", icon: SquareKanbanIcon },
   { title: "Pomodoro", to: "/pomodoro", icon: TimerIcon },
