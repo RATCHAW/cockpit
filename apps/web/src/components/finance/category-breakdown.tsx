@@ -7,9 +7,12 @@ const TOP = 6
 /** Where the money went: a bar list, since the job is comparing magnitudes, not parts of a pie. */
 export function CategoryBreakdown({
   summary,
+  focusLabel,
   onEditCategories,
 }: {
   summary: Summary | undefined
+  /** Set when the breakdown is narrowed to one bar of the cash flow chart. */
+  focusLabel?: string
   onEditCategories: () => void
 }) {
   if (!summary) return null
@@ -26,16 +29,19 @@ export function CategoryBreakdown({
       aria-labelledby="categories-title"
     >
       <header className="flex items-center justify-between gap-3">
-        <h2 id="categories-title" className="text-display-xs">
-          Where it went
-        </h2>
+        <div className="grid gap-1">
+          <h2 id="categories-title" className="text-display-xs">
+            Where it went
+          </h2>
+          {focusLabel ? <p className="text-body-sm text-body">In {focusLabel}</p> : null}
+        </div>
         <Button variant="ghost" size="xs" onClick={onEditCategories}>
           Edit categories
         </Button>
       </header>
       {rows.length === 0 ? (
         <p className="rounded-lg bg-canvas-soft p-4 text-body-sm text-body">
-          Nothing spent in this period.
+          Nothing spent in {focusLabel ?? "this period"}.
         </p>
       ) : (
         <ul className="grid gap-4">

@@ -3,10 +3,10 @@ import { Skeleton } from "@cockpit/ui/components/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@cockpit/ui/components/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@cockpit/ui/components/tooltip"
 import { cn } from "@cockpit/ui/lib/utils"
-import { ArrowDownLeftIcon, ArrowUpRightIcon, RepeatIcon } from "lucide-react"
+import { ArrowDownLeftIcon, ArrowUpRightIcon, RepeatIcon, XIcon } from "lucide-react"
 import { useMemo, useState } from "react"
 
-import { formatDay, formatMoney, type Account, type Transaction } from "~/lib/finance"
+import { formatDay, formatMoney, type Account, type Summary, type Transaction } from "~/lib/finance"
 
 const PAGE = 30
 type Filter = "all" | Transaction["kind"]
@@ -15,12 +15,18 @@ export function TransactionList({
   items,
   accounts,
   currency,
+  focus,
+  stale = false,
   onSelect,
   onAdd,
 }: {
   items: Transaction[] | undefined
   accounts: Account[] | undefined
   currency: string
+  /** Set when the list is narrowed to one bar of the cash flow chart. */
+  focus?: { label: string; totals: Summary["totals"] | undefined; onClear: () => void }
+  /** The items are from the previous selection while the new ones load. */
+  stale?: boolean
   onSelect: (transaction: Transaction) => void
   onAdd: () => void
 }) {
@@ -43,9 +49,24 @@ export function TransactionList({
       aria-labelledby="transactions-title"
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="transactions-title" className="text-display-xs">
-          Transactions
-        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 id="transactions-title" className="text-display-xs">
+            Transactions
+          </h2>
+          {focus ? (
+            <span className="inline-flex h-8 items-center gap-1 rounded-full bg-ink pr-1 pl-3 text-body-sm font-semibold text-canvas">
+              {focus.label}
+              <button
+                type="button"
+                onClick={focus.onClear}
+                aria-label={`Show the whole period instead of ${focus.label}`}
+                className="grid size-6 cursor-pointer place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-canvas/15 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <XIcon className="size-3.5" aria-hidden />
+              </button>
+            </span>
+          ) : null}
+        </div>
         <Tabs
           value={filter}
           onValueChange={(value) => {
@@ -61,6 +82,29 @@ export function TransactionList({
         </Tabs>
       </header>
 
+      {focus?.totals ? (
+        <dl className="-mt-1 flex flex-wrap gap-x-6 gap-y-1 text-body-sm">
+          <div className="flex gap-1.5">
+            <dt className="text-body">Spent</dt>
+            <dd className="font-semibold tabular-nums">
+              {formatMoney(focus.totals.expense, currency)}
+            </dd>
+          </div>
+          <div className="flex gap-1.5">
+            <dt className="text-body">Earned</dt>
+            <dd className="font-semibold text-positive-deep tabular-nums">
+              {formatMoney(focus.totals.income, currency)}
+            </dd>
+          </div>
+          <div className="flex gap-1.5">
+            <dt className="text-body">Net</dt>
+            <dd className="font-semibold tabular-nums">
+              {formatMoney(focus.totals.net, currency, { sign: true })}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+
       {!items ? (
         <div className="grid gap-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -69,13 +113,20 @@ export function TransactionList({
         </div>
       ) : filtered.length === 0 ? (
         <div className="grid justify-items-start gap-4 rounded-lg bg-canvas-soft p-6">
-          <p className="text-body-md text-body">Nothing in this period yet.</p>
+          <p className="text-body-md text-body">
+            {focus ? `Nothing in ${focus.label}.` : "Nothing in this period yet."}
+          </p>
           <Button variant="outline" size="sm" onClick={onAdd}>
             Add a transaction
           </Button>
         </div>
       ) : (
-        <div className="grid gap-5">
+        <div
+          className={cn(
+            "grid gap-5 transition-opacity duration-200 ease-out",
+            stale && "opacity-60",
+          )}
+        >
           {days.map(([day, transactions]) => (
             <div key={day} className="grid gap-1">
               <h3 className="text-caption font-semibold tracking-wide text-mute uppercase">

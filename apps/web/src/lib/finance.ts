@@ -282,3 +282,21 @@ export function periodRange(period: Period, custom: { from?: string; to?: string
       return { from: custom.from ?? firstOfMonth(0), to: custom.to ?? today }
   }
 }
+
+/**
+ * The dates covered by one chart bar ("2026-09" or "2026-09-14"), clipped to the range shown.
+ * Undefined when the bar falls outside it, e.g. a stale link after the period changed.
+ */
+export function focusRange(focus: string | undefined, range: { from?: string; to: string }) {
+  if (!focus) return undefined
+  let start = focus
+  let end = focus
+  if (focus.length === 7) {
+    const [y, m] = focus.split("-").map(Number)
+    start = `${focus}-01`
+    end = isoDate(new Date(y!, m!, 0))
+  }
+  const from = range.from && range.from > start ? range.from : start
+  const to = range.to < end ? range.to : end
+  return from <= to ? { from, to } : undefined
+}

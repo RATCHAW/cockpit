@@ -1,5 +1,14 @@
 import { ChartContainer, type ChartConfig } from "@cockpit/ui/components/chart"
-import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Rectangle,
+  Tooltip,
+  XAxis,
+  YAxis,
+  type BarShapeProps,
+} from "recharts"
 
 import { formatMoney, formatPeriod, type Summary } from "~/lib/finance"
 
@@ -10,28 +19,62 @@ const config = {
 
 type Point = Summary["series"][number]
 
-/** Income vs spending per day or month. One axis, one currency, identity via legend + tooltip. */
-export function CashflowChart({ summary }: { summary: Summary }) {
+/**
+ * Income vs spending per day or month. One axis, one currency, identity via legend + tooltip.
+ * Clicking a bar selects its period; clicking it again clears the selection.
+ */
+export function CashflowChart({
+  summary,
+  selected,
+  onSelect,
+}: {
+  summary: Summary
+  /** The selected bar's period ("2026-09" or "2026-09-14"), if any. */
+  selected?: string
+  onSelect: (period: string | undefined) => void
+}) {
   const { series, granularity, currency } = summary
   const dense = series.length > 16
+  const selectedIndex = series.findIndex((point) => point.period === selected)
+  const unit = granularity === "month" ? "month" : "day"
+
+  // Other bars fade back so the selected one reads as the subject.
+  const shape = (props: BarShapeProps) => (
+    <Rectangle
+      {...props}
+      fillOpacity={selectedIndex === -1 || props.index === selectedIndex ? 1 : 0.3}
+      className="transition-[fill-opacity] duration-200 ease-out"
+    />
+  )
 
   return (
     <div className="grid gap-4">
-      <ul className="flex flex-wrap gap-x-5 gap-y-1 text-body-sm text-body" aria-label="Legend">
-        {(["income", "expense"] as const).map((key) => (
-          <li key={key} className="flex items-center gap-2">
-            <span
-              className="size-2.5 rounded-xs"
-              style={{ background: config[key].color }}
-              aria-hidden
-            />
-            {config[key].label}
-          </li>
-        ))}
-      </ul>
-      <ChartContainer config={config} className="aspect-auto h-64 w-full sm:h-72">
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-1">
+        <ul className="flex flex-wrap gap-x-5 gap-y-1 text-body-sm text-body" aria-label="Legend">
+          {(["income", "expense"] as const).map((key) => (
+            <li key={key} className="flex items-center gap-2">
+              <span
+                className="size-2.5 rounded-xs"
+                style={{ background: config[key].color }}
+                aria-hidden
+              />
+              {config[key].label}
+            </li>
+          ))}
+        </ul>
+        <p className="text-body-sm text-mute">
+          {selectedIndex === -1
+            ? `Click a ${unit} to see its transactions`
+            : `Click ${formatPeriod(selected!, granularity, true)} again to see the whole period`}
+        </p>
+      </div>
+      <ChartContainer config={config} className="aspect-auto h-64 w-full cursor-pointer sm:h-72">
         <BarChart
           data={series}
+          onClick={({ activeIndex }) => {
+            const point = activeIndex == null ? undefined : series[Number(activeIndex)]
+            if (point) onSelect(point.period === selected ? undefined : point.period)
+          }}
           margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
           barGap={2}
           barCategoryGap={dense ? "20%" : "28%"}
@@ -71,12 +114,14 @@ export function CashflowChart({ summary }: { summary: Summary }) {
             dataKey="income"
             fill="var(--color-income)"
             radius={[4, 4, 0, 0]}
+            shape={shape}
             isAnimationActive={false}
           />
           <Bar
             dataKey="expense"
             fill="var(--color-expense)"
             radius={[4, 4, 0, 0]}
+            shape={shape}
             isAnimationActive={false}
           />
         </BarChart>
