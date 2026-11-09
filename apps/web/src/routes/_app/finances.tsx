@@ -22,7 +22,9 @@ import {
   categoriesQueryOptions,
   CURRENCIES,
   currencyName,
+  focusRange,
   formatDate,
+  formatPeriod,
   PERIODS,
   periodRange,
   recurringQueryOptions,
@@ -38,6 +40,12 @@ const searchSchema = z.object({
   to: z.iso.date().optional().catch(undefined),
   /** View everything in another currency without changing the saved preference. */
   currency: z.enum(CURRENCIES).optional().catch(undefined),
+  /** A cash flow bar ("2026-09" or "2026-09-14") that narrows the transactions and breakdown. */
+  focus: z
+    .string()
+    .regex(/^\d{4}-\d{2}(-\d{2})?$/)
+    .optional()
+    .catch(undefined),
 })
 
 export const Route = createFileRoute("/_app/finances")({
@@ -61,13 +69,26 @@ function FinancesPage() {
   const currency = search.currency ?? settings.data?.displayCurrency
   const range = { ...periodRange(search.period, search), currency }
 
+  // Clicking a chart bar narrows the transactions and "Where it went" to that month (or day).
+  // Unfocused, `detailRange` equals `range`, so both summary queries share one cache entry.
+  const focused = focusRange(search.focus, range)
+  const detailRange = focused ? { ...focused, currency } : range
+
   const summary = useQuery({ ...summaryQueryOptions(range), enabled: !!currency })
-  const transactions = useQuery({ ...transactionsQueryOptions(range), enabled: !!currency })
+  const detail = useQuery({ ...summaryQueryOptions(detailRange), enabled: !!currency })
+  const transactions = useQuery({ ...transactionsQueryOptions(detailRange), enabled: !!currency })
   const recurring = useQuery({ ...recurringQueryOptions(currency), enabled: !!currency })
   const accounts = useQuery({ ...accountsQueryOptions(currency), enabled: !!currency })
 
-  const failed = summary.isError || transactions.isError || recurring.isError
+  const failed = summary.isError || detail.isError || transactions.isError || recurring.isError
   const showing = summary.data?.currency ?? currency
+  const focusLabel =
+    focused && search.focus
+      ? formatPeriod(search.focus, search.focus.length === 7 ? "month" : "day", true)
+      : undefined
+
+  const setFocus = (focus: string | undefined) =>
+    void navigate({ search: (prev) => ({ ...prev, focus }), replace: true })
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-8">
@@ -109,6 +130,7 @@ function FinancesPage() {
               period,
               from: period === "custom" ? from : undefined,
               to: period === "custom" ? to : undefined,
+              focus: undefined,
             }),
             replace: true,
           })
@@ -140,7 +162,11 @@ function FinancesPage() {
           ) : null}
         </header>
         {summary.data ? (
-          <CashflowChart summary={summary.data} />
+          <CashflowChart
+            summary={summary.data}
+            selected={focused ? search.focus : undefined}
+            onSelect={setFocus}
+          />
         ) : (
           <div className="h-[calc(16rem+2.25rem)] animate-pulse rounded-lg bg-canvas-soft sm:h-[calc(18rem+2.25rem)]" />
         )}
@@ -151,6 +177,16 @@ function FinancesPage() {
           items={transactions.data?.items}
           accounts={accounts.data?.items}
           currency={transactions.data?.currency ?? showing ?? "USD"}
+          focus={
+            focusLabel
+              ? {
+                  label: focusLabel,
+                  totals: detail.isPlaceholderData ? undefined : detail.data?.totals,
+                  onClear: () => setFocus(undefined),
+                }
+              : undefined
+          }
+          stale={transactions.isPlaceholderData}
           onSelect={(transaction) => setDialog({ mode: "edit", transaction })}
           onAdd={() => setDialog({ mode: "create" })}
         />
@@ -162,7 +198,8 @@ function FinancesPage() {
             onAdd={() => setDialog({ mode: "create", repeat: "monthly" })}
           />
           <CategoryBreakdown
-            summary={summary.data}
+            summary={detail.data}
+            focusLabel={detail.isPlaceholderData ? undefined : focusLabel}
             onEditCategories={() => setManagingCategories(true)}
           />
         </div>
